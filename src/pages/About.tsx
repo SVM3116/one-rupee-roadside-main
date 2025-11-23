@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import manojPhoto from "@/assets/Manoj Kumar V.jpg";
 import arihantPhoto from "@/assets/Arihant V Hachchambali.jpg";
 import bheemanagoudaPhoto from "@/assets/Bheemanagouda Biradar.jpg";
+import bhagyashreePhoto from "@/assets/Bhagyashree.jpg";
 
 const About = () => {
   const developers = [
@@ -33,7 +34,7 @@ const About = () => {
       initials: "B",
       year: "3rd Year CSBS",
       university: "VTU Belagavi",
-      photo: null, // Photo not available yet
+      photo: bhagyashreePhoto,
     },
   ];
 
