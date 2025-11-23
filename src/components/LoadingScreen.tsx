@@ -8,24 +8,34 @@ interface LoadingScreenProps {
   duration?: number; // Total duration in milliseconds
 }
 
-const LoadingScreen = ({ onComplete, duration = 4000 }: LoadingScreenProps) => {
+const LoadingScreen = ({ onComplete, duration = 2000 }: LoadingScreenProps) => {
+  const [phase, setPhase] = useState<'car-moving' | 'car-fading' | 'logo-showing' | 'complete'>('car-moving');
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
-    // Start fade out near the end
-    const fadeTimer = setTimeout(() => {
-      setIsVisible(false);
-    }, duration - 300);
+    // Phase 1: Car moves from left to center (0-1s)
+    const carMoveTimer = setTimeout(() => {
+      setPhase('car-fading');
+    }, 1000);
 
-    // Complete callback
+    // Phase 2: Car fades out (1-1.5s)
+    const carFadeTimer = setTimeout(() => {
+      setPhase('logo-showing');
+    }, 1500);
+
+    // Phase 3: Logo and name appear (1.5-2s)
+    // Phase 4: Complete and fade out (2s)
     const completeTimer = setTimeout(() => {
+      setPhase('complete');
+      setIsVisible(false);
       if (onComplete) {
         onComplete();
       }
     }, duration);
 
     return () => {
-      clearTimeout(fadeTimer);
+      clearTimeout(carMoveTimer);
+      clearTimeout(carFadeTimer);
       clearTimeout(completeTimer);
     };
   }, [duration, onComplete]);
@@ -35,10 +45,10 @@ const LoadingScreen = ({ onComplete, duration = 4000 }: LoadingScreenProps) => {
   }
 
   return (
-    <div className={`loading-screen ${!isVisible ? "fade-out" : ""}`}>
+    <div className={`loading-screen ${phase === 'complete' ? "fade-out" : ""}`}>
       <div className="loading-container">
-        {/* Real Car Image - Centered */}
-        <div className="car-image-container">
+        {/* Car Image - Moves from left to center, then fades out */}
+        <div className={`car-image-container ${phase === 'car-fading' || phase === 'logo-showing' || phase === 'complete' ? 'car-fade-out' : ''}`}>
           <img 
             src={carImage} 
             alt="Car" 
@@ -46,8 +56,8 @@ const LoadingScreen = ({ onComplete, duration = 4000 }: LoadingScreenProps) => {
           />
         </div>
 
-        {/* Brand Text - Below the car */}
-        <div className="brand-text-below">
+        {/* Brand Text - Appears after car fades out */}
+        <div className={`brand-text-below ${phase === 'logo-showing' || phase === 'complete' ? 'logo-fade-in' : 'logo-hidden'}`}>
           <h1 className="brand-name-below">ONE RUPEE RAPIDFIX</h1>
           <p className="brand-tagline-below">WHEN ROADS STOP YOU, WE DON'T.</p>
         </div>
@@ -65,7 +75,7 @@ export const useLoadingScreen = () => {
     setIsLoading(true);
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 4000);
+    }, 2000);
 
     return () => clearTimeout(timer);
   }, [location.pathname]);

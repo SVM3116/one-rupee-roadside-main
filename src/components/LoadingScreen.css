@@ -54,11 +54,12 @@
    ============================================ */
 
 .car-image-container {
+  position: absolute;
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: carFadeIn 1s ease-in-out forwards;
   z-index: 10;
+  animation: carMoveLeftToCenter 1s ease-out forwards;
 }
 
 .car-image {
@@ -67,28 +68,33 @@
   height: auto;
   object-fit: contain;
   filter: drop-shadow(0 10px 30px rgba(255, 107, 0, 0.3));
-  animation: carPulse 2s ease-in-out infinite;
 }
 
-@keyframes carFadeIn {
+/* Car moves from left to center */
+@keyframes carMoveLeftToCenter {
   0% {
-    opacity: 0;
-    transform: scale(0.8);
+    transform: translateX(-100vw);
+    opacity: 1;
   }
   100% {
+    transform: translateX(0);
     opacity: 1;
-    transform: scale(1);
   }
 }
 
-@keyframes carPulse {
-  0%, 100% {
-    transform: scale(1);
-    filter: drop-shadow(0 10px 30px rgba(255, 107, 0, 0.3));
+/* Car fades out */
+.car-image-container.car-fade-out {
+  animation: carFadeOut 0.5s ease-in forwards;
+}
+
+@keyframes carFadeOut {
+  0% {
+    transform: translateX(0);
+    opacity: 1;
   }
-  50% {
-    transform: scale(1.05);
-    filter: drop-shadow(0 15px 40px rgba(255, 107, 0, 0.5));
+  100% {
+    transform: translateX(0);
+    opacity: 0;
   }
 }
 
@@ -98,22 +104,35 @@
 
 .brand-text-below {
   text-align: center;
-  animation: textFadeIn 1.5s ease-in-out forwards;
   z-index: 5;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
+  position: absolute;
 }
 
-@keyframes textFadeIn {
+/* Logo hidden initially */
+.brand-text-below.logo-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Logo fades in */
+.brand-text-below.logo-fade-in {
+  animation: logoFadeIn 0.5s ease-in forwards;
+}
+
+@keyframes logoFadeIn {
   0% {
     opacity: 0;
     transform: translateY(20px);
+    visibility: visible;
   }
   100% {
     opacity: 1;
     transform: translateY(0);
+    visibility: visible;
   }
 }
 
@@ -190,3 +209,4 @@
     gap: 2rem;
   }
 }
+
