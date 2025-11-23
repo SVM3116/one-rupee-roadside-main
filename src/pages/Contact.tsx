@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Mail, MapPin, Phone } from "lucide-react";
+import { Mail, MapPin, Phone, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 
 const Contact = () => {
@@ -40,7 +40,7 @@ const Contact = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" type="tel" placeholder="+91 98765 43210" />
+                  <Input id="phone" type="tel" placeholder="+917975464020" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="message">Message</Label>
@@ -84,8 +84,30 @@ const Contact = () => {
                   </div>
                   <div>
                     <h3 className="font-semibold text-lg mb-1">Phone</h3>
-                    <p className="text-muted-foreground">+91 98765 43210</p>
+                    <p className="text-muted-foreground">+917975464020</p>
                     <p className="text-sm text-muted-foreground">Available 24/7</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex items-start space-x-4">
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center flex-shrink-0">
+                    <MessageCircle className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg mb-1">WhatsApp</h3>
+                    <a 
+                      href="https://wa.me/7975464020" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-muted-foreground hover:text-green-600 transition-colors underline"
+                    >
+                      Chat with us on WhatsApp
+                    </a>
+                    <p className="text-sm text-muted-foreground mt-1">Available 24/7</p>
                   </div>
                 </div>
               </CardContent>
