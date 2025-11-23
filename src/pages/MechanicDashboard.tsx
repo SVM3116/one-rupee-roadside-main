@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Navigation, Clock, CheckCircle, Loader2, User, Settings, XCircle, ExternalLink } from "lucide-react";
+import { MapPin, Navigation, Clock, CheckCircle, Loader2, User, Settings, XCircle, ExternalLink, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import Map from "@/components/Map";
@@ -41,6 +41,115 @@ const MechanicDashboard = () => {
 
   useEffect(() => {
     checkMechanicAuth();
+    
+    // Store navigation type at page load time
+    let navigationType: string | number | null = null;
+    try {
+      // Modern API: Performance Navigation Timing
+      const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+      if (navEntries.length > 0) {
+        navigationType = navEntries[0].type;
+      } else if ((performance as any).navigation) {
+        // Fallback: Legacy API
+        navigationType = (performance as any).navigation.type;
+      }
+    } catch (error) {
+      console.error("Error checking navigation type:", error);
+    }
+    
+    // Set a flag on page load to help detect rapid refreshes
+    const pageLoadTime = Date.now();
+    sessionStorage.setItem('page_load_time', pageLoadTime.toString());
+    
+    // Clear the flag after a delay (refresh typically happens within 1-2 seconds)
+    const clearFlagTimeout = setTimeout(() => {
+      sessionStorage.removeItem('page_load_time');
+    }, 2000);
+    
+    // Helper function to check if this is likely a refresh
+    const isLikelyRefresh = (): boolean => {
+      // Method 1: Check navigation type (if page was loaded via reload)
+      if (navigationType === 'reload' || navigationType === 1) {
+        return true;
+      }
+      
+      // Method 2: Check if page was just loaded (rapid unload = likely refresh)
+      const loadTime = sessionStorage.getItem('page_load_time');
+      if (loadTime) {
+        const timeSinceLoad = Date.now() - parseInt(loadTime, 10);
+        // If unload happens within 2 seconds of load, likely a refresh
+        if (timeSinceLoad < 2000) {
+          return true;
+        }
+      }
+      
+      return false;
+    };
+    
+    // Primary handler: pagehide (more reliable on mobile, fires after beforeunload)
+    const handlePageHide = (e: PageTransitionEvent) => {
+      // e.persisted = false means page is being discarded (tab close or navigation away)
+      // e.persisted = true means page is cached (back/forward navigation, won't be discarded)
+      if (!e.persisted) {
+        // Check if this is likely a refresh - if so, don't logout
+        const likelyRefresh = isLikelyRefresh();
+        
+        if (!likelyRefresh) {
+          // Tab/window is being closed or user navigated away (not a refresh)
+          try {
+            // Sign out from Supabase
+            supabase.auth.signOut().catch(() => {
+              // Ignore errors if tab is already closed
+            });
+            
+            // Clear storage
+            localStorage.clear();
+            sessionStorage.clear();
+          } catch (error) {
+            console.error("Error signing out on page hide:", error);
+          }
+        } else {
+          // Clear the flag if it exists (refresh case)
+          sessionStorage.removeItem('page_load_time');
+        }
+      }
+    };
+    
+    // Secondary handler: beforeunload (backup, fires before pagehide)
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Check if this is likely a refresh
+      const likelyRefresh = isLikelyRefresh();
+      
+      if (!likelyRefresh) {
+        // Tab/window is being closed or navigating away, not refreshed
+        try {
+          // Sign out from Supabase (async, may not complete but we try)
+          supabase.auth.signOut().catch(() => {
+            // Ignore errors if tab is already closed
+          });
+          
+          // Clear storage immediately
+          localStorage.clear();
+          sessionStorage.clear();
+        } catch (error) {
+          console.error("Error signing out on tab close:", error);
+        }
+      } else {
+        // Clear the flag if it exists (refresh case)
+        sessionStorage.removeItem('page_load_time');
+      }
+    };
+    
+    // Add event listeners
+    // pagehide is more reliable on mobile and fires after beforeunload
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      clearTimeout(clearFlagTimeout);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, []);
 
   useEffect(() => {
@@ -172,6 +281,42 @@ const MechanicDashboard = () => {
       navigate("/auth");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      // Stop location sharing if active
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        setWatchId(null);
+        setIsSharing(false);
+      }
+      
+      // Set availability to offline
+      if (user?.id) {
+        try {
+          await supabase
+            .from("profiles")
+            .update({ availability_status: "offline" })
+            .eq("id", user.id);
+        } catch (error) {
+          console.error("Error updating availability status:", error);
+        }
+      }
+      
+      // Sign out from Supabase
+      await supabase.auth.signOut();
+      
+      // Clear storage
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      toast.success("Signed out successfully");
+      navigate("/");
+    } catch (error) {
+      console.error("Error signing out:", error);
+      toast.error("Error signing out");
     }
   };
 
@@ -534,6 +679,17 @@ const MechanicDashboard = () => {
             >
               <span className="hidden sm:inline">Test Backend</span>
               <span className="sm:hidden">Test</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSignOut}
+              className="gap-2 text-xs sm:text-sm"
+            >
+              <LogOut className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Sign Out</span>
+              <span className="sm:hidden">Out</span>
             </Button>
           </div>
         </div>

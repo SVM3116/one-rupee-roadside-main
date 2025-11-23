@@ -6,6 +6,7 @@ import heroImage from "@/assets/hero-roadside.jpg";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Testimonials from "@/components/Testimonials";
+import AnimatedText from "@/components/AnimatedText";
 
 const Home = () => {
   return (
@@ -18,11 +19,23 @@ const Home = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-6">
               <div className="space-y-2">
-                <h1 className="text-5xl md:text-6xl font-bold leading-tight bg-gradient-to-r from-gray-800 via-gray-700 to-orange-600 bg-clip-text text-transparent">
-                  ONE RUPEE
+                <h1 className="text-5xl md:text-6xl font-bold leading-tight">
+                  <AnimatedText 
+                    text="ONE RUPEE" 
+                    delay={0}
+                    letterDelay={120}
+                    loopDelay={1500}
+                    isGradient={true}
+                    className="bg-gradient-to-r from-gray-800 via-gray-700 to-orange-600 bg-clip-text text-transparent"
+                  />
                 </h1>
                 <h2 className="text-4xl md:text-5xl font-bold leading-tight text-orange-500 drop-shadow-[0_0_8px_rgba(249,115,22,0.5)]">
-                  RAPIDFIX.
+                  <AnimatedText 
+                    text="RAPIDFIX." 
+                    delay={1200}
+                    letterDelay={100}
+                    loopDelay={1500}
+                  />
                 </h2>
                 <p className="text-2xl md:text-3xl font-semibold text-orange-500 mt-4">
                   WHEN ROADS STOP YOU, WE DON'T.
