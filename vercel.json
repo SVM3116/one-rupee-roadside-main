@@ -4,15 +4,6 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "vite",
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://your-backend-url.railway.app/api/:path*"
-    }
-  ],
-  "env": {
-    "VITE_API_BASE": "@vite_api_base"
-  },
   "headers": [
     {
       "source": "/(.*)",
@@ -33,4 +24,3 @@
     }
   ]
 }
-
