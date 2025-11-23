@@ -1,6 +1,9 @@
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
+import manojPhoto from "@/assets/Manoj Kumar V.jpg";
+import arihantPhoto from "@/assets/Arihant V Hachchambali.jpg";
+import bheemanagoudaPhoto from "@/assets/Bheemanagouda Biradar.jpg";
 
 const About = () => {
   const developers = [
@@ -9,24 +12,28 @@ const About = () => {
       initials: "MK",
       year: "3rd Year CSBS",
       university: "VTU Belagavi",
+      photo: manojPhoto,
     },
     {
       name: "Arihant V Hachchambali",
       initials: "AH",
       year: "3rd Year CSBS",
       university: "VTU Belagavi",
+      photo: arihantPhoto,
     },
     {
       name: "Bheemanagouda Biradar",
       initials: "BB",
       year: "3rd Year CSBS",
       university: "VTU Belagavi",
+      photo: bheemanagoudaPhoto,
     },
     {
       name: "Bhagyashree",
       initials: "B",
       year: "3rd Year CSBS",
       university: "VTU Belagavi",
+      photo: null, // Photo not available yet
     },
   ];
 
@@ -96,10 +103,20 @@ const About = () => {
                   className="transition-all duration-300 hover:scale-105 hover:shadow-lg cursor-pointer"
                 >
                   <CardContent className="pt-6 flex flex-col items-center text-center space-y-4">
-                    {/* Circular Avatar with Initials */}
-                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center text-white text-2xl font-bold shadow-md">
-                      {developer.initials}
-                    </div>
+                    {/* Circular Avatar with Photo or Initials */}
+                    {developer.photo ? (
+                      <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-orange-500 shadow-md">
+                        <img 
+                          src={developer.photo} 
+                          alt={developer.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center text-white text-2xl font-bold shadow-md">
+                        {developer.initials}
+                      </div>
+                    )}
                     
                     {/* Name */}
                     <div>
