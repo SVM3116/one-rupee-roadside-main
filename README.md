@@ -1,73 +1,115 @@
-# Welcome to your Lovable project
+# 🚀 ONE RUPEE RAPIDFIX - Roadside Mechanic Assistance System
 
-## Project info
+A web-based platform that connects users facing vehicle breakdowns with nearby verified mechanics in real-time.
 
-**URL**: https://lovable.dev/projects/b95eb8a2-c857-40d5-825e-280984f6f2dd
+## ✨ Features
 
-## How can I edit this code?
+- 🔐 Multi-role authentication (User, Mechanic, Admin)
+- 📍 GPS-based location detection
+- 🟢 Real-time mechanic availability toggle
+- 🎯 Automatic job assignment to nearest mechanic (within 50km)
+- 📊 Live location tracking on admin dashboard
+- ✅ Document verification for mechanics
+- ⭐ Rating and review system
+- 📱 Fully responsive design
 
-There are several ways of editing your application.
+## 🛠️ Tech Stack
 
-**Use Lovable**
+### Frontend
+- React.js (Vite)
+- TypeScript
+- Tailwind CSS
+- Shadcn UI
+- Google Maps API
+- Supabase (Auth & Realtime)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/b95eb8a2-c857-40d5-825e-280984f6f2dd) and start prompting.
+### Backend
+- Node.js
+- Express.js
+- MongoDB Atlas
+- JWT Authentication
 
-Changes made via Lovable will be committed automatically to this repo.
+### Database
+- MongoDB (Backend data)
+- Supabase PostgreSQL (Auth, profiles, locations, jobs)
 
-**Use your preferred IDE**
+## 🚀 Quick Start
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Prerequisites
+- Node.js 18+
+- MongoDB Atlas account
+- Supabase account
+- Google Maps API key
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Installation
 
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+1. **Clone repository**
+```bash
+git clone https://github.com/SVM3116/one-rupee-roadside-main.git
+cd one-rupee-roadside-main
 ```
 
-**Edit a file directly in GitHub**
+2. **Install dependencies**
+```bash
+# Frontend
+npm install
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+# Backend
+cd backend
+npm install
+```
 
-**Use GitHub Codespaces**
+3. **Environment Variables**
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Create `.env` in root:
+```env
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_key
+VITE_GOOGLE_MAPS_API_KEY=your_google_maps_key
+VITE_API_BASE=http://localhost:5000
+```
 
-## What technologies are used for this project?
+Create `backend/.env`:
+```env
+PORT=5000
+MONGODB_URI=your_mongodb_uri
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_key
+JWT_SECRET=your_jwt_secret
+```
 
-This project is built with:
+4. **Run Supabase Migrations**
+- Go to Supabase SQL Editor
+- Run SQL files from `supabase/migrations/` folder
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+5. **Start Development Servers**
+```bash
+# Terminal 1 - Backend
+cd backend
+npm start
 
-## How can I deploy this project?
+# Terminal 2 - Frontend (with HTTPS)
+npm run dev:https
+```
 
-Simply open [Lovable](https://lovable.dev/projects/b95eb8a2-c857-40d5-825e-280984f6f2dd) and click on Share -> Publish.
+## 🌐 Deployment
 
-## Can I connect a custom domain to my Lovable project?
+See `START_DEPLOYMENT.md` for detailed deployment instructions.
 
-Yes, you can!
+**Recommended Platforms:**
+- Frontend: Vercel
+- Backend: Railway or Render
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## 📚 Documentation
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- `HOW_TO_UPLOAD_TO_GITHUB.md` - Upload project to GitHub
+- `START_DEPLOYMENT.md` - Deploy to internet
+- `backend/API_DOCUMENTATION.md` - API reference
+
+## 📄 License
+
+This project is private/proprietary.
+
+---
+
+**Built with ❤️ for roadside assistance**
