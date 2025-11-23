@@ -27,10 +27,10 @@ const Logo = ({ size = "md", showText = true, className = "" }: LogoProps) => {
         <img 
           src={logoImage} 
           alt="ONE RUPEE RAPIDFIX Logo" 
-          className={`${sizeClasses[size]} object-contain`}
+          className={`${sizeClasses[size]} rounded-full object-cover border-2 border-orange-500/20`}
         />
       ) : (
-        <div className={`${sizeClasses[size]} bg-gray-200 rounded flex items-center justify-center text-xs text-gray-400`}>
+        <div className={`${sizeClasses[size]} bg-gray-200 rounded-full flex items-center justify-center text-xs text-gray-400`}>
           Logo
         </div>
       )}
