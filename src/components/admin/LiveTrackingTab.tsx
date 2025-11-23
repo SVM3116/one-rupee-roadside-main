@@ -258,7 +258,7 @@ const LiveTrackingTab = () => {
         console.log(`✅ [Admin] Found ${profiles.length} profiles`);
       }
 
-      // Fetch locations - try all first
+      // Fetch ALL mechanic locations (not filtered) - we'll match them to mechanics below
       let locations: any[] = [];
       const { data: locationData, error: locationError } = await supabase
         .from("mechanic_locations")
@@ -277,9 +277,8 @@ const LiveTrackingTab = () => {
         console.log(`✅ [Admin] Found ${locations.length} mechanic locations (total)`);
       }
 
-      // Filter locations to only include our mechanics
+      // Match locations to mechanics (will show location only if mechanic has shared it)
       const mechanicLocations = locations.filter(loc => mechanicIds.includes(loc.mechanic_id));
-      console.log(`📊 [Admin] ${mechanicLocations.length} locations match our ${mechanicIds.length} mechanics`);
 
       // Fetch active jobs
       const { data: jobs, error: jobError } = await supabase
@@ -288,15 +287,18 @@ const LiveTrackingTab = () => {
         .in("mechanic_id", mechanicIds)
         .in("status", ["pending", "accepted", "on_the_way", "reached_destination", "repair_started", "repair_completed"]);
 
-      // Combine data
+      // Combine data - show ALL mechanics regardless of location
+      // Location will only show if mechanic is online and has shared location
       const mechanicsData: MechanicData[] = (profiles || []).map(profile => {
+        // Only get location if mechanic is online and has shared it
         const location = mechanicLocations.find(l => l.mechanic_id === profile.id);
         const job = jobs?.find(j => j.mechanic_id === profile.id);
 
         return {
           ...profile,
-          latitude: location ? Number(location.latitude) : undefined,
-          longitude: location ? Number(location.longitude) : undefined,
+          // Only show location if mechanic is online and has actively shared it
+          latitude: (profile.availability_status === "online" && location) ? Number(location.latitude) : undefined,
+          longitude: (profile.availability_status === "online" && location) ? Number(location.longitude) : undefined,
           updated_at: location?.updated_at,
           current_job: job ? {
             id: job.id,
@@ -354,7 +356,7 @@ const LiveTrackingTab = () => {
 
       const userIds = roleData.map(r => r.user_id);
 
-      // Fetch profiles
+      // Fetch profiles - get ALL user profiles
       const { data: profiles, error: profileError } = await supabase
         .from("profiles")
         .select("id, email, full_name, phone")
@@ -362,11 +364,10 @@ const LiveTrackingTab = () => {
 
       if (profileError) throw profileError;
 
-      // Fetch locations
+      // Fetch ALL locations (not filtered by user_id) - we'll match them below
       const { data: locations, error: locationError } = await supabase
         .from("user_locations")
-        .select("user_id, latitude, longitude, updated_at")
-        .in("user_id", userIds);
+        .select("user_id, latitude, longitude, updated_at");
 
       // Fetch active jobs
       const { data: jobs, error: jobError } = await supabase
@@ -375,13 +376,15 @@ const LiveTrackingTab = () => {
         .in("user_id", userIds)
         .in("status", ["pending", "accepted", "on_the_way", "reached_destination", "repair_started", "repair_completed"]);
 
-      // Combine data
+      // Combine data - show ALL users regardless of location
       const usersData: UserData[] = (profiles || []).map(profile => {
+        // Only get location if user has shared it (when they're online/active)
         const location = locations?.find(l => l.user_id === profile.id);
         const job = jobs?.find(j => j.user_id === profile.id);
 
         return {
           ...profile,
+          // Only show location if user has actively shared it
           latitude: location ? Number(location.latitude) : undefined,
           longitude: location ? Number(location.longitude) : undefined,
           updated_at: location?.updated_at,
@@ -472,12 +475,12 @@ const LiveTrackingTab = () => {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Active Users</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{usersWithLocation.length}</div>
+            <div className="text-2xl font-bold">{users.length}</div>
             <p className="text-xs text-muted-foreground">
-              {users.filter(u => u.active_job).length} with active jobs
+              {usersWithLocation.length} sharing location, {users.filter(u => u.active_job).length} with active jobs
             </p>
           </CardContent>
         </Card>
@@ -518,14 +521,16 @@ const LiveTrackingTab = () => {
                     fullscreenControl: true,
                   }}
                 >
-                  {/* Mechanic Markers */}
-                  {mechanicsWithLocation.map((mechanic) => (
+                  {/* Mechanic Markers - Only show when online and location is available */}
+                  {mechanics
+                    .filter(m => m.availability_status === "online" && m.latitude && m.longitude)
+                    .map((mechanic) => (
                     <Marker
                       key={mechanic.id}
                       position={{ lat: mechanic.latitude!, lng: mechanic.longitude! }}
                       icon={{
                         path: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z",
-                        fillColor: mechanic.availability_status === "online" ? "#10b981" : "#6b7280",
+                        fillColor: "#10b981",
                         fillOpacity: 1,
                         strokeColor: "#ffffff",
                         strokeWeight: 2,
@@ -552,8 +557,10 @@ const LiveTrackingTab = () => {
                     </Marker>
                   ))}
 
-                  {/* User Markers */}
-                  {usersWithLocation.map((user) => (
+                  {/* User Markers - Only show when location is shared */}
+                  {users
+                    .filter(u => u.latitude && u.longitude)
+                    .map((user) => (
                     <Marker
                       key={user.id}
                       position={{ lat: user.latitude!, lng: user.longitude! }}
@@ -657,20 +664,20 @@ const LiveTrackingTab = () => {
         </Card>
       </div>
 
-      {/* Users List */}
+      {/* Users List - Show ALL users */}
       <Card>
         <CardHeader>
-          <CardTitle>Active Users</CardTitle>
-          <CardDescription>Users with active location sharing</CardDescription>
+          <CardTitle>All Users</CardTitle>
+          <CardDescription>All registered users - Location shown when shared</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {usersWithLocation.length === 0 ? (
+            {users.length === 0 ? (
               <p className="text-sm text-muted-foreground col-span-full text-center py-4">
-                No users with active location
+                No users registered
               </p>
             ) : (
-              usersWithLocation.map((user) => (
+              users.map((user) => (
                 <div
                   key={user.id}
                   className="p-3 border rounded-lg hover:bg-muted/50 transition-colors"

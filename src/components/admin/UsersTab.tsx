@@ -66,17 +66,54 @@ const UsersTab = () => {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
+      // Fetch ALL users (excluding mechanics and admins)
+      // First get user IDs from user_roles
+      const { data: roleData, error: roleError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .or("role.eq.user,role.eq.traveler");
 
-      if (error) {
-        console.error("Error fetching users:", error);
-        throw error;
+      if (roleError) {
+        console.error("Error fetching user roles:", roleError);
+        // Fallback: get all profiles and filter out mechanics/admins
+        const { data: allData, error: fallbackError } = await supabase
+          .from("profiles")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (fallbackError) throw fallbackError;
+        
+        const filteredProfiles = (allData || []).filter(p => p.role !== "mechanic" && p.role !== "admin");
+        setUsers(filteredProfiles);
+        return;
       }
-      
-      setUsers(data || []);
+
+      const userIds = roleData?.map(r => r.user_id) || [];
+
+      // If no user roles found, try to get all profiles and filter
+      let profiles: Profile[] = [];
+      if (userIds.length > 0) {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .in("id", userIds)
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        profiles = data || [];
+      } else {
+        // Fallback: get all profiles and filter out mechanics/admins
+        const { data: allData, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        // Filter out mechanics and admins
+        profiles = (allData || []).filter(p => p.role !== "mechanic" && p.role !== "admin");
+      }
+
+      setUsers(profiles);
     } catch (error: any) {
       console.error("Error fetching users:", error);
       toast({

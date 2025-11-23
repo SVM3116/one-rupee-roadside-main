@@ -6,13 +6,10 @@
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://your-backend-url.railway.app/api/:path*"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ],
-  "env": {
-    "VITE_API_BASE": "@vite_api_base"
-  },
   "headers": [
     {
       "source": "/(.*)",
