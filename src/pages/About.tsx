@@ -3,6 +3,33 @@ import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 
 const About = () => {
+  const developers = [
+    {
+      name: "Manoj Kumar V",
+      initials: "MK",
+      year: "3rd Year CSBS",
+      university: "VTU Belagavi",
+    },
+    {
+      name: "Arihant V Hachchambali",
+      initials: "AH",
+      year: "3rd Year CSBS",
+      university: "VTU Belagavi",
+    },
+    {
+      name: "Bheemanagouda Biradar",
+      initials: "BB",
+      year: "3rd Year CSBS",
+      university: "VTU Belagavi",
+    },
+    {
+      name: "Bhagyashree",
+      initials: "B",
+      year: "3rd Year CSBS",
+      university: "VTU Belagavi",
+    },
+  ];
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
@@ -19,75 +46,89 @@ const About = () => {
             <p className="text-2xl font-semibold text-orange-500 mb-4">
               WHEN ROADS STOP YOU, WE DON'T.
             </p>
-            <p className="text-xl text-muted-foreground">
-              Connecting travelers with trusted mechanics across India
-            </p>
           </div>
 
           <Card>
             <CardContent className="pt-6 space-y-6">
-              <h2 className="text-3xl font-bold">Our Mission</h2>
+              <h2 className="text-3xl font-bold">About Us</h2>
               <p className="text-lg text-muted-foreground leading-relaxed">
-                ONE RUPEE RAPIDFIX was founded with a simple yet powerful mission: to ensure that no traveler 
-                is left stranded on the road. We believe that everyone deserves access to quick, reliable, 
-                and affordable roadside assistance, no matter where they are in India. When roads stop you, we don't.
+                One Rupee RapidFix is an on-demand roadside mechanic assistance platform designed to help travellers 
+                and vehicle owners during unexpected vehicle breakdowns. We instantly connect users with nearby verified 
+                mechanics using real-time GPS detection — similar to how Swiggy or Zomato match users with partners, 
+                but for emergency vehicle repair.
+              </p>
+              <p className="text-lg text-muted-foreground leading-relaxed">
+                Our goal is to make roadside assistance fast, safe, and accessible across urban and rural areas without 
+                subscriptions or long waiting times. Mechanics can easily toggle online/offline, accept requests, and 
+                reach users quickly, ensuring smooth and reliable help anytime.
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardContent className="pt-6 space-y-6">
-              <h2 className="text-3xl font-bold">How It Works</h2>
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-xl font-semibold mb-2">1. Request Help</h3>
-                  <p className="text-muted-foreground">
-                    Use our platform to request assistance. Share your location and describe your vehicle issue.
-                  </p>
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold mb-2">2. Connect with Mechanic</h3>
-                  <p className="text-muted-foreground">
-                    Get matched with verified mechanics near you. Track their arrival in real-time.
-                  </p>
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold mb-2">3. Get Fixed</h3>
-                  <p className="text-muted-foreground">
-                    Professional mechanics arrive to fix your vehicle on the spot. Pay securely through our platform.
-                  </p>
-                </div>
-              </div>
+              <h2 className="text-3xl font-bold">Mission</h2>
+              <p className="text-lg text-muted-foreground leading-relaxed">
+                To provide stress-free, dependable roadside repair for everyone, everywhere.
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardContent className="pt-6 space-y-6">
-              <h2 className="text-3xl font-bold">Why Trust Us</h2>
-              <ul className="space-y-3 text-lg text-muted-foreground">
-                <li className="flex items-start">
-                  <span className="text-primary mr-2">•</span>
-                  All mechanics are verified with background checks
-                </li>
-                <li className="flex items-start">
-                  <span className="text-primary mr-2">•</span>
-                  Transparent pricing with no hidden charges
-                </li>
-                <li className="flex items-start">
-                  <span className="text-primary mr-2">•</span>
-                  24/7 customer support for your peace of mind
-                </li>
-                <li className="flex items-start">
-                  <span className="text-primary mr-2">•</span>
-                  Secure payment gateway for safe transactions
-                </li>
-                <li className="flex items-start">
-                  <span className="text-primary mr-2">•</span>
-                  Community-driven ratings and reviews
-                </li>
-              </ul>
+              <h2 className="text-3xl font-bold">Tagline</h2>
+              <p className="text-2xl font-semibold text-orange-500">
+                "When Roads Stop You, We Don't."
+              </p>
             </CardContent>
           </Card>
+
+          {/* Meet Our Developers Section */}
+          <div className="space-y-6">
+            <div className="text-center">
+              <h2 className="text-3xl font-bold">Meet Our Developers</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {developers.map((developer, index) => (
+                <Card
+                  key={index}
+                  className="transition-all duration-300 hover:scale-105 hover:shadow-lg cursor-pointer"
+                >
+                  <CardContent className="pt-6 flex flex-col items-center text-center space-y-4">
+                    {/* Circular Avatar with Initials */}
+                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center text-white text-2xl font-bold shadow-md">
+                      {developer.initials}
+                    </div>
+                    
+                    {/* Name */}
+                    <div>
+                      <h3 className="text-lg font-bold text-foreground">
+                        {developer.name}
+                      </h3>
+                    </div>
+                    
+                    {/* Role */}
+                    <div>
+                      <p className="text-sm text-orange-500 font-medium">
+                        Developer
+                      </p>
+                    </div>
+                    
+                    {/* Year & University */}
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">
+                        {developer.year}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {developer.university}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
