@@ -127,97 +127,35 @@ const LiveTrackingTab = () => {
 
   const fetchMechanics = async () => {
     try {
-      console.log("🔍 [Admin] Fetching mechanics...");
-      
-      // Get mechanic user IDs from user_roles
-      const { data: roleData, error: roleError } = await supabase
-        .from("user_roles")
-        .select("user_id")
+      // Get ALL mechanics directly from profiles table (regardless of location)
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, email, full_name, phone, availability_status, verification_status")
         .eq("role", "mechanic");
 
-      if (roleError) {
-        console.error("❌ [Admin] Error fetching mechanic roles:", roleError);
-        console.error("   Error details:", {
-          code: roleError.code,
-          message: roleError.message,
-          details: roleError.details,
-          hint: roleError.hint
-        });
-        
-        // Fallback: try to get all profiles and filter by role column
-        console.log("⚠️ [Admin] Trying fallback: fetching all profiles with role='mechanic'...");
-        const { data: allProfiles, error: profileError } = await supabase
+      if (profileError) {
+        console.error("❌ [Admin] Error fetching mechanics from profiles:", profileError);
+        // Try fallback: get all profiles and filter
+        const { data: allProfiles } = await supabase
           .from("profiles")
-          .select("id, email, full_name, phone, availability_status, verification_status, role")
-          .eq("role", "mechanic");
+          .select("id, email, full_name, phone, availability_status, verification_status, role");
         
-        if (profileError) {
-          console.error("❌ [Admin] Fallback also failed:", profileError);
-          console.log("⚠️ [Admin] Trying final fallback: fetching ALL profiles...");
-          
-          // Final fallback: get all profiles and check manually
-          const { data: allProfilesNoFilter, error: allProfilesError } = await supabase
-            .from("profiles")
-            .select("id, email, full_name, phone, availability_status, verification_status, role");
-          
-          if (allProfilesError) {
-            console.error("❌ [Admin] Final fallback failed:", allProfilesError);
-            toast({
-              title: "Error",
-              description: "Failed to fetch mechanics. Please check RLS policies and run FIX_ALL_RLS_COMPREHENSIVE.sql",
-              variant: "destructive",
-            });
-            setMechanics([]);
-            return;
-          }
-          
-          if (allProfilesNoFilter && allProfilesNoFilter.length > 0) {
-            // Filter for mechanics manually
-            const mechanicsFromProfiles = allProfilesNoFilter.filter(p => p.role === "mechanic");
-            console.log(`✅ [Admin] Final fallback: Found ${mechanicsFromProfiles.length} mechanics from all profiles`);
-            if (mechanicsFromProfiles.length > 0) {
-              const mechanicIds = mechanicsFromProfiles.map(p => p.id);
-              await fetchMechanicData(mechanicIds);
-            } else {
-              console.warn("⚠️ [Admin] No profiles with role='mechanic' found");
-              setMechanics([]);
-            }
-          } else {
-            console.warn("⚠️ [Admin] No profiles found at all");
-            setMechanics([]);
-          }
-          return;
-        }
-        
-        if (allProfiles && allProfiles.length > 0) {
-          console.log(`✅ [Admin] Fallback: Found ${allProfiles.length} mechanics from profiles`);
-          const mechanicIds = allProfiles.map(p => p.id);
+        if (allProfiles) {
+          const mechanicsFromProfiles = allProfiles.filter(p => p.role === "mechanic");
+          const mechanicIds = mechanicsFromProfiles.map(p => p.id);
           await fetchMechanicData(mechanicIds);
         } else {
-          console.warn("⚠️ [Admin] No mechanics found in profiles either");
-          console.warn("   This means either:");
-          console.warn("   1. No mechanics have registered");
-          console.warn("   2. Mechanics haven't been assigned role='mechanic' in profiles table");
-          console.warn("   3. RLS is blocking access to profiles");
           setMechanics([]);
         }
         return;
       }
 
-      if (!roleData || roleData.length === 0) {
-        console.warn("⚠️ [Admin] No mechanics found in user_roles");
-        console.warn("   This could mean:");
-        console.warn("   1. No mechanics have registered yet");
-        console.warn("   2. RLS policies are blocking access to user_roles");
-        console.warn("   3. Mechanics haven't been assigned the 'mechanic' role");
+      if (!profileData || profileData.length === 0) {
         setMechanics([]);
         return;
       }
 
-      const mechanicIds = roleData.map(r => r.user_id);
-      console.log(`✅ [Admin] Found ${mechanicIds.length} mechanics in user_roles`);
-      console.log("📋 Mechanic IDs:", mechanicIds);
-      
+      const mechanicIds = profileData.map(p => p.id);
       await fetchMechanicData(mechanicIds);
     } catch (error) {
       console.error("❌ [Admin] Error fetching mechanics:", error);
@@ -301,7 +239,8 @@ const LiveTrackingTab = () => {
 
         return {
           ...profile,
-          // Only show location if mechanic is online and has actively shared it
+          // Only show location on map if mechanic is online and has actively shared it
+          // But show mechanic in list regardless of location
           latitude: (profile.availability_status === "online" && location) ? Number(location.latitude) : undefined,
           longitude: (profile.availability_status === "online" && location) ? Number(location.longitude) : undefined,
           updated_at: location?.updated_at,
@@ -341,33 +280,65 @@ const LiveTrackingTab = () => {
 
   const fetchUsers = async () => {
     try {
-      // Get user IDs from user_roles (excluding mechanics and admins)
-      // Fix: Use .or() instead of .in() for multiple role values
-      const { data: roleData, error: roleError } = await supabase
-        .from("user_roles")
-        .select("user_id, role")
-        .or("role.eq.user,role.eq.traveler");
-      
-      if (roleError) {
-        console.error("❌ [Admin] Error fetching user roles:", roleError);
-        setUsers([]);
-        return;
-      }
-
-      if (!roleData || roleData.length === 0) {
-        setUsers([]);
-        return;
-      }
-
-      const userIds = roleData.map(r => r.user_id);
-
-      // Fetch profiles - get ALL user profiles
+      // Get ALL users directly from profiles table (excluding mechanics and admins)
+      // Fetch users with role='user' OR role='traveler' directly from profiles
       const { data: profiles, error: profileError } = await supabase
         .from("profiles")
-        .select("id, email, full_name, phone")
-        .in("id", userIds);
+        .select("id, email, full_name, phone, role")
+        .or("role.eq.user,role.eq.traveler");
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error("❌ [Admin] Error fetching users from profiles:", profileError);
+        // Fallback: get all profiles and filter
+        const { data: allProfiles } = await supabase
+          .from("profiles")
+          .select("id, email, full_name, phone, role");
+        
+        if (allProfiles) {
+          const usersFromProfiles = allProfiles.filter(p => p.role === "user" || p.role === "traveler");
+          const userIds = usersFromProfiles.map(p => p.id);
+          
+          // Fetch locations and jobs for these users
+          const { data: locations } = await supabase
+            .from("user_locations")
+            .select("user_id, latitude, longitude, updated_at");
+
+          const { data: jobs } = await supabase
+            .from("job_requests")
+            .select("id, user_id, status, mechanic_id")
+            .in("user_id", userIds)
+            .in("status", ["pending", "accepted", "on_the_way", "reached_destination", "repair_started", "repair_completed"]);
+
+          const usersData: UserData[] = usersFromProfiles.map(profile => {
+            const location = locations?.find(l => l.user_id === profile.id);
+            const job = jobs?.find(j => j.user_id === profile.id);
+
+            return {
+              ...profile,
+              latitude: location ? Number(location.latitude) : undefined,
+              longitude: location ? Number(location.longitude) : undefined,
+              updated_at: location?.updated_at,
+              active_job: job ? {
+                id: job.id,
+                status: job.status,
+                mechanic_id: job.mechanic_id,
+              } : undefined,
+            };
+          });
+
+          setUsers(usersData);
+        } else {
+          setUsers([]);
+        }
+        return;
+      }
+
+      if (!profiles || profiles.length === 0) {
+        setUsers([]);
+        return;
+      }
+
+      const userIds = profiles.map(p => p.id);
 
       // Fetch ALL locations (not filtered by user_id) - we'll match them below
       const { data: locations, error: locationError } = await supabase
@@ -382,8 +353,8 @@ const LiveTrackingTab = () => {
         .in("status", ["pending", "accepted", "on_the_way", "reached_destination", "repair_started", "repair_completed"]);
 
       // Combine data - show ALL users regardless of location
+      // Location will only show if user has shared it
       const usersData: UserData[] = (profiles || []).map(profile => {
-        // Only get location if user has shared it (when they're online/active)
         const location = locations?.find(l => l.user_id === profile.id);
         const job = jobs?.find(j => j.user_id === profile.id);
 
@@ -404,6 +375,7 @@ const LiveTrackingTab = () => {
       setUsers(usersData);
     } catch (error) {
       console.error("Error fetching users:", error);
+      setUsers([]);
     }
   };
 
