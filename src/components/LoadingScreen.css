@@ -22,7 +22,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3rem;
+  gap: 0;
 }
 
 /* Fade Out Animation */
@@ -99,39 +99,124 @@
 }
 
 /* ============================================
-   BRAND TEXT BELOW CAR
+   LOGO
    ============================================ */
 
-.brand-text-below {
-  text-align: center;
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
+.logo-container {
   position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 8;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.logo-image {
+  max-width: 150px;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 5px 15px rgba(255, 107, 0, 0.4));
 }
 
 /* Logo hidden initially */
-.brand-text-below.logo-hidden {
+.logo-container.logo-hidden {
   opacity: 0;
   visibility: hidden;
 }
 
 /* Logo fades in */
-.brand-text-below.logo-fade-in {
-  animation: logoFadeIn 0.5s ease-in forwards;
+.logo-container.logo-fade-in {
+  animation: logoFadeIn 0.2s ease-in forwards;
 }
 
 @keyframes logoFadeIn {
   0% {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translate(-50%, -50%) scale(0.8);
     visibility: visible;
   }
   100% {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate(-50%, -50%) scale(1);
+    visibility: visible;
+  }
+}
+
+/* ============================================
+   BRAND NAME
+   ============================================ */
+
+.brand-text-below {
+  position: absolute;
+  text-align: center;
+  z-index: 7;
+  top: 58%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+}
+
+/* Name hidden initially */
+.brand-text-below.name-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Name fades in */
+.brand-text-below.name-fade-in {
+  animation: nameFadeIn 0.15s ease-in forwards;
+}
+
+@keyframes nameFadeIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) translateY(20px);
+    visibility: visible;
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) translateY(0);
+    visibility: visible;
+  }
+}
+
+/* ============================================
+   TAGLINE
+   ============================================ */
+
+.brand-tagline-container {
+  position: absolute;
+  text-align: center;
+  z-index: 6;
+  top: 68%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+}
+
+/* Tagline hidden initially */
+.brand-tagline-container.tagline-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Tagline fades in */
+.brand-tagline-container.tagline-fade-in {
+  animation: taglineFadeIn 0.15s ease-in forwards;
+}
+
+@keyframes taglineFadeIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) translateY(20px);
+    visibility: visible;
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) translateY(0);
     visibility: visible;
   }
 }
@@ -182,6 +267,10 @@
     max-width: 250px;
   }
 
+  .logo-image {
+    max-width: 120px;
+  }
+
   .brand-name-below {
     font-size: 1.8rem;
   }
@@ -189,11 +278,27 @@
   .brand-tagline-below {
     font-size: 1rem;
   }
+
+  .logo-container {
+    top: 43%;
+  }
+
+  .brand-text-below {
+    top: 56%;
+  }
+
+  .brand-tagline-container {
+    top: 66%;
+  }
 }
 
 @media (max-width: 480px) {
   .car-image {
     max-width: 200px;
+  }
+
+  .logo-image {
+    max-width: 100px;
   }
 
   .brand-name-below {
@@ -205,8 +310,16 @@
     font-size: 0.9rem;
   }
 
-  .loading-container {
-    gap: 2rem;
+  .logo-container {
+    top: 41%;
+  }
+
+  .brand-text-below {
+    top: 54%;
+  }
+
+  .brand-tagline-container {
+    top: 64%;
   }
 }
 

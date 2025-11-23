@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import carImage from "@/assets/car.png";
+import logoImage from "@/assets/logo.png";
 import "./LoadingScreen.css";
 
 interface LoadingScreenProps {
@@ -9,7 +10,7 @@ interface LoadingScreenProps {
 }
 
 const LoadingScreen = ({ onComplete, duration = 2000 }: LoadingScreenProps) => {
-  const [phase, setPhase] = useState<'car-moving' | 'car-fading' | 'logo-showing' | 'complete'>('car-moving');
+  const [phase, setPhase] = useState<'car-moving' | 'car-fading' | 'logo-appearing' | 'name-appearing' | 'tagline-appearing' | 'complete'>('car-moving');
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
@@ -20,11 +21,20 @@ const LoadingScreen = ({ onComplete, duration = 2000 }: LoadingScreenProps) => {
 
     // Phase 2: Car fades out (1-1.5s)
     const carFadeTimer = setTimeout(() => {
-      setPhase('logo-showing');
+      setPhase('logo-appearing');
     }, 1500);
 
-    // Phase 3: Logo and name appear (1.5-2s)
-    // Phase 4: Complete and fade out (2s)
+    // Phase 3: Logo appears (1.5-1.7s)
+    const logoTimer = setTimeout(() => {
+      setPhase('name-appearing');
+    }, 1700);
+
+    // Phase 4: Name appears (1.7-1.85s)
+    const nameTimer = setTimeout(() => {
+      setPhase('tagline-appearing');
+    }, 1850);
+
+    // Phase 5: Complete and fade out (2s)
     const completeTimer = setTimeout(() => {
       setPhase('complete');
       setIsVisible(false);
@@ -36,6 +46,8 @@ const LoadingScreen = ({ onComplete, duration = 2000 }: LoadingScreenProps) => {
     return () => {
       clearTimeout(carMoveTimer);
       clearTimeout(carFadeTimer);
+      clearTimeout(logoTimer);
+      clearTimeout(nameTimer);
       clearTimeout(completeTimer);
     };
   }, [duration, onComplete]);
@@ -48,7 +60,7 @@ const LoadingScreen = ({ onComplete, duration = 2000 }: LoadingScreenProps) => {
     <div className={`loading-screen ${phase === 'complete' ? "fade-out" : ""}`}>
       <div className="loading-container">
         {/* Car Image - Moves from left to center, then fades out */}
-        <div className={`car-image-container ${phase === 'car-fading' || phase === 'logo-showing' || phase === 'complete' ? 'car-fade-out' : ''}`}>
+        <div className={`car-image-container ${phase !== 'car-moving' ? 'car-fade-out' : ''}`}>
           <img 
             src={carImage} 
             alt="Car" 
@@ -56,9 +68,22 @@ const LoadingScreen = ({ onComplete, duration = 2000 }: LoadingScreenProps) => {
           />
         </div>
 
-        {/* Brand Text - Appears after car fades out */}
-        <div className={`brand-text-below ${phase === 'logo-showing' || phase === 'complete' ? 'logo-fade-in' : 'logo-hidden'}`}>
+        {/* Logo - Appears after car disappears */}
+        <div className={`logo-container ${phase === 'logo-appearing' || phase === 'name-appearing' || phase === 'tagline-appearing' || phase === 'complete' ? 'logo-fade-in' : 'logo-hidden'}`}>
+          <img 
+            src={logoImage} 
+            alt="Logo" 
+            className="logo-image"
+          />
+        </div>
+
+        {/* Brand Name - Appears after logo */}
+        <div className={`brand-text-below ${phase === 'name-appearing' || phase === 'tagline-appearing' || phase === 'complete' ? 'name-fade-in' : 'name-hidden'}`}>
           <h1 className="brand-name-below">ONE RUPEE RAPIDFIX</h1>
+        </div>
+
+        {/* Tagline - Appears last */}
+        <div className={`brand-tagline-container ${phase === 'tagline-appearing' || phase === 'complete' ? 'tagline-fade-in' : 'tagline-hidden'}`}>
           <p className="brand-tagline-below">WHEN ROADS STOP YOU, WE DON'T.</p>
         </div>
       </div>
