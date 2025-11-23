@@ -116,8 +116,13 @@ const LiveTrackingTab = () => {
   }, []);
 
   const fetchAllData = async () => {
-    await Promise.all([fetchMechanics(), fetchUsers()]);
-    setLoading(false);
+    try {
+      await Promise.all([fetchMechanics(), fetchUsers()]);
+    } catch (error) {
+      console.error("Error fetching all data:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchMechanics = async () => {

@@ -50,14 +50,14 @@ const UsersTab = () => {
       }
 
       // Verify admin role
-      const { data: roleData } = await supabase
+      const { data: adminRoleData } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", session.user.id)
         .eq("role", "admin")
         .single();
 
-      if (!roleData) {
+      if (!adminRoleData) {
         toast({
           title: "Error",
           description: "Admin access required",
@@ -114,6 +114,7 @@ const UsersTab = () => {
       }
 
       setUsers(profiles);
+      setLoading(false);
     } catch (error: any) {
       console.error("Error fetching users:", error);
       toast({
@@ -121,7 +122,6 @@ const UsersTab = () => {
         description: error.message || "Failed to fetch users. Check RLS policies.",
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
     }
   };
