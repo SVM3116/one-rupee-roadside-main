@@ -87,7 +87,7 @@ const Footer = () => {
         </div>
 
         <div className="border-t mt-8 pt-8 text-center text-sm text-muted-foreground">
-          <p>© 2024 ONE RUPEE RAPIDFIX. All rights reserved.</p>
+          <p>© 2025 ONE RUPEE RAPIDFIX. All rights reserved.</p>
         </div>
       </div>
     </footer>

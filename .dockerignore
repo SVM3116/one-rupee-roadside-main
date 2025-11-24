@@ -1,0 +1,41 @@
+# Frontend build artifacts (not needed for backend)
+dist/
+node_modules/
+
+# Development files
+.git/
+.gitignore
+.env.local
+.env.development
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Documentation (optional - can remove if needed)
+*.md
+!backend/**/*.md
+
+# Frontend source (not needed for backend Docker build)
+src/
+public/
+*.html
+
+# Frontend config files
+vite.config.ts
+tsconfig*.json
+tailwind.config.ts
+postcss.config.js
+components.json
+eslint.config.js
+
+# Other deployment configs (keep railway.json in repo but Docker doesn't need it in image)
+vercel.json
+
