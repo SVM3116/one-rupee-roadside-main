@@ -54,6 +54,15 @@ const Home = () => {
                     Find a Mechanic
                   </Button>
                 </Link>
+                <Link to="/auth?role=mechanic">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="w-full sm:w-auto text-lg h-14 px-8 border-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground font-semibold shadow-md"
+                  >
+                    🔧 Mechanic Login
+                  </Button>
+                </Link>
                 <Link to="/about">
                   <Button
                     size="lg"

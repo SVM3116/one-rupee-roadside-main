@@ -5,6 +5,7 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { MapPin, Navigation, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import ChatButton from './ChatButton';
 
 interface JobRequest {
   id: string;
@@ -18,9 +19,11 @@ interface JobRequest {
 interface TrackingPanelProps {
   userId: string;
   onTrackingStart?: (mechanicId: string, jobId: string) => void;
+  getUnreadCount?: (requestId: string) => number;
+  onChatOpen?: (requestId: string) => void;
 }
 
-const TrackingPanel = ({ userId, onTrackingStart }: TrackingPanelProps) => {
+const TrackingPanel = ({ userId, onTrackingStart, getUnreadCount, onChatOpen }: TrackingPanelProps) => {
   const [activeJob, setActiveJob] = useState<JobRequest | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -114,10 +117,15 @@ const TrackingPanel = ({ userId, onTrackingStart }: TrackingPanelProps) => {
       pending: { label: 'Pending', className: 'bg-yellow-600' },
       accepted: { label: 'Accepted', className: 'bg-blue-600' },
       on_the_way: { label: 'On The Way', className: 'bg-green-600' },
+      reached_destination: { label: 'Reached', className: 'bg-green-600' },
+      repair_started: { label: 'Repair Started', className: 'bg-orange-600' },
+      repair_completed: { label: 'Repair Completed', className: 'bg-green-600' },
       completed: { label: 'Completed', className: 'bg-gray-600' },
+      rejected: { label: 'Rejected', className: 'bg-red-600' },
+      cancelled: { label: 'Cancelled', className: 'bg-gray-600' },
     };
 
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
+    const config = statusConfig[status as keyof typeof statusConfig] || { label: status, className: 'bg-gray-600' };
     return <Badge className={config.className}>{config.label}</Badge>;
   };
 
@@ -127,6 +135,13 @@ const TrackingPanel = ({ userId, onTrackingStart }: TrackingPanelProps) => {
         return <Navigation className="h-12 w-12 text-green-600 animate-pulse" />;
       case 'accepted':
         return <CheckCircle className="h-12 w-12 text-blue-600" />;
+      case 'reached_destination':
+        return <MapPin className="h-12 w-12 text-green-600" />;
+      case 'repair_started':
+      case 'repair_completed':
+        return <CheckCircle className="h-12 w-12 text-orange-600" />;
+      case 'completed':
+        return <CheckCircle className="h-12 w-12 text-green-600" />;
       default:
         return <MapPin className="h-12 w-12 text-yellow-600" />;
     }
@@ -146,9 +161,15 @@ const TrackingPanel = ({ userId, onTrackingStart }: TrackingPanelProps) => {
           
           <div>
             <h3 className="font-semibold text-lg">
-              {activeJob.status === 'on_the_way' && 'Help is on the way!'}
-              {activeJob.status === 'accepted' && 'Request Accepted'}
               {activeJob.status === 'pending' && 'Finding a mechanic...'}
+              {activeJob.status === 'accepted' && 'Mechanic Accepted Your Request!'}
+              {activeJob.status === 'on_the_way' && 'Mechanic is On The Way!'}
+              {activeJob.status === 'reached_destination' && 'Mechanic Has Reached Your Location!'}
+              {activeJob.status === 'repair_started' && 'Repair in Progress...'}
+              {activeJob.status === 'repair_completed' && 'Repair Completed!'}
+              {activeJob.status === 'completed' && 'Job Completed!'}
+              {!['pending', 'accepted', 'on_the_way', 'reached_destination', 'repair_started', 'repair_completed', 'completed'].includes(activeJob.status) && 
+                `Status: ${activeJob.status.replace('_', ' ')}`}
             </h3>
             <p className="text-sm text-muted-foreground mt-2">
               {activeJob.vehicle_type && `Vehicle: ${activeJob.vehicle_type}`}
@@ -160,10 +181,22 @@ const TrackingPanel = ({ userId, onTrackingStart }: TrackingPanelProps) => {
             )}
           </div>
 
-          {activeJob.status === 'on_the_way' && (
+          {['on_the_way', 'reached_destination', 'repair_started', 'repair_completed'].includes(activeJob.status) && (
             <p className="text-sm text-green-600 font-medium">
               Track the mechanic's location on the map above
             </p>
+          )}
+
+          {activeJob.mechanic_id && (
+            <div className="mt-4">
+              <ChatButton
+                requestId={activeJob.id}
+                userId={userId}
+                unreadCount={getUnreadCount ? getUnreadCount(activeJob.id) : 0}
+                onOpen={onChatOpen ? () => onChatOpen(activeJob.id) : undefined}
+                senderType="user"
+              />
+            </div>
           )}
         </div>
       </CardContent>

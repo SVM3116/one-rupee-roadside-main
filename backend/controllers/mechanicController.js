@@ -1,169 +1,147 @@
-const Mechanic = require('../models/Mechanic');
-const mongoose = require('mongoose');
-const { findNearestMechanics } = require('../utils/distance');
-
-// In-memory fallback store for development when MongoDB isn't available
-const IN_MEMORY_MECHANICS = new Map();
-
-function usingMockDB() {
-  // mongoose.connection.readyState === 1 means connected
-  return mongoose.connection.readyState !== 1;
-}
-
-async function upsertMechanicByUid(uid, data) {
-  if (usingMockDB()) {
-    const existing = IN_MEMORY_MECHANICS.get(uid) || { uid, createdAt: new Date().toISOString() };
-    const updated = { ...existing, ...data, uid, updatedAt: new Date().toISOString() };
-    IN_MEMORY_MECHANICS.set(uid, updated);
-    return updated;
-  }
-
-  let updated = await Mechanic.findOneAndUpdate({ uid }, data, { new: true, runValidators: true }).lean();
-  if (!updated) {
-    const createDoc = await Mechanic.create({ uid, ...data });
-    updated = createDoc.toObject();
-  }
-  return updated;
-}
-
-async function findMechanicByUid(uid) {
-  if (usingMockDB()) return IN_MEMORY_MECHANICS.get(uid) || null;
-  return await Mechanic.findOne({ uid }).select('isOnline availabilityStatus updatedAt uid').lean();
-}
-
-async function countMechanics() {
-  if (usingMockDB()) return IN_MEMORY_MECHANICS.size;
-  return await Mechanic.countDocuments();
-}
+const { supabase } = require('../utils/supabase');
+const { calculateDistance } = require('../utils/distance');
 
 /**
  * POST /api/mechanic/toggle-online
- * body: { isOnline }
- * Requires authentication middleware to set req.user.id
+ * Toggle mechanic online/offline status
  */
 exports.toggleOnline = async (req, res) => {
   try {
-    const { isOnline, mechanicId } = req.body;
+    const uid = req.user?.id;
+    if (!uid) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { isOnline } = req.body;
     if (typeof isOnline !== 'boolean') {
       return res.status(400).json({ error: 'isOnline (boolean) is required' });
     }
 
-    // Get uid from user (set by middleware) or from body (dev fallback)
-    const uid = (req.user && req.user.id) || mechanicId;
-    if (!uid) {
-      return res.status(401).json({ error: 'Unauthorized: user ID required' });
+    const availabilityStatus = isOnline ? 'online' : 'offline';
+
+    // Update profile (role check is done by middleware)
+    const { data: updated, error } = await supabase
+      .from('profiles')
+      .update({
+        availability_status: availabilityStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', uid)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
     }
 
-    console.log('[toggleOnline] Updating mechanic status', { uid, isOnline });
-
-    const updated = await upsertMechanicByUid(uid, { 
-      isOnline, 
-      availabilityStatus: isOnline ? 'online' : 'offline' 
+    return res.json({
+      success: true,
+      mechanic: {
+        uid: updated.id,
+        isOnline,
+        availabilityStatus,
+        updatedAt: updated.updated_at,
+      },
     });
-
-    // CRITICAL: Update Supabase profiles table to sync availability_status
-    // This ensures admin dashboard and job assignment can see the correct status
-    try {
-      const supabaseUrl = process.env.SUPABASE_URL;
-      const supabaseKey = process.env.SUPABASE_ANON_KEY;
-      
-      if (supabaseUrl && supabaseKey) {
-        const now = new Date().toISOString();
-        const response = await fetch(`${supabaseUrl}/rest/v1/profiles?id=eq.${uid}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': supabaseKey,
-            'Authorization': `Bearer ${supabaseKey}`,
-            'Prefer': 'return=minimal'
-          },
-          body: JSON.stringify({ 
-            availability_status: isOnline ? 'online' : 'offline',
-            updated_at: now
-          })
-        });
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('[toggleOnline] Failed to sync to Supabase:', response.status, errorText);
-          // This is critical - fail the request if Supabase sync fails
-          return res.status(500).json({ 
-            error: 'Failed to update status in database',
-            details: errorText 
-          });
-        } else {
-          console.log('[toggleOnline] ✅ Successfully synced availability_status to Supabase:', isOnline ? 'online' : 'offline');
-        }
-      } else {
-        console.warn('[toggleOnline] Supabase credentials not configured - skipping sync');
-      }
-    } catch (supabaseErr) {
-      console.error('[toggleOnline] Error syncing to Supabase:', supabaseErr);
-      // This is critical - fail the request if Supabase sync fails
-      return res.status(500).json({ 
-        error: 'Failed to update status in database',
-        details: supabaseErr.message 
-      });
-    }
-    
-    return res.json({ success: true, mechanic: updated });
   } catch (err) {
     console.error('toggleOnline error', err);
-    return res.status(500).json({ error: 'Failed to update mechanic status' });
+    return res.status(500).json({ error: 'Failed to update mechanic status', details: err.message });
   }
 };
 
 /**
  * GET /api/mechanic/online-status/:id?
- * If :id provided -> public lookup by uid
- * If no :id and authenticated -> return current user's status
+ * Get mechanic online status
  */
 exports.getOnlineStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const lookupId = id || (req.user && req.user.id);
-    if (!lookupId) return res.status(400).json({ error: 'Mechanic id required or authenticate' });
+    const uid = id || req.user?.id;
+    if (!uid) {
+      return res.status(400).json({ error: 'Mechanic id required or authenticate' });
+    }
 
-    const mech = await findMechanicByUid(lookupId);
-    if (!mech) {
-      // If mechanic doesn't exist, return default offline status instead of 404
-      // This allows the toggle to work even if mechanic hasn't been created yet
-      return res.json({ 
-        success: true, 
-        status: { 
-          isOnline: false, 
-          availabilityStatus: 'offline', 
-          updatedAt: null, 
-          uid: lookupId 
-        } 
+    // Check if user is a mechanic via user_roles
+    const { data: roleData, error: roleError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', uid)
+      .eq('role', 'mechanic')
+      .maybeSingle();
+
+    // If not a mechanic, return offline status
+    if (roleError || !roleData) {
+      return res.json({
+        success: true,
+        status: {
+          isOnline: false,
+          availabilityStatus: 'offline',
+          updatedAt: null,
+          uid,
+        },
       });
     }
 
-    return res.json({ success: true, status: { isOnline: mech.isOnline, availabilityStatus: mech.availabilityStatus, updatedAt: mech.updatedAt, uid: mech.uid } });
+    // Get profile for availability status
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('availability_status, updated_at')
+      .eq('id', uid)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      // Return default offline status if profile doesn't exist
+      return res.json({
+        success: true,
+        status: {
+          isOnline: false,
+          availabilityStatus: 'offline',
+          updatedAt: null,
+          uid,
+        },
+      });
+    }
+
+    const isOnline = profile.availability_status === 'online';
+
+    return res.json({
+      success: true,
+      status: {
+        isOnline,
+        availabilityStatus: profile.availability_status || 'offline',
+        updatedAt: profile.updated_at,
+        uid,
+      },
+    });
   } catch (err) {
     console.error('getOnlineStatus error', err);
-    return res.status(500).json({ error: 'Failed to get online status' });
+    return res.status(500).json({ error: 'Failed to get online status', details: err.message });
   }
 };
 
 /**
  * GET /api/mechanic/ping
- * health check: server time, db state, mechanic count
+ * Health check endpoint
  */
 exports.ping = async (req, res) => {
   try {
-    const state = mongoose.connection.readyState; // 1 means connected
-    let count = null;
-    try {
-      count = await countMechanics();
-    } catch (e) {
-      count = null;
+    // Count mechanics via user_roles table
+    const { count, error: countError } = await supabase
+      .from('user_roles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'mechanic');
+
+    if (countError) {
+      console.warn('Error counting mechanics:', countError);
     }
 
-    return res.json({ success: true, time: new Date().toISOString(), dbState: state, mechanicCount: count });
+    return res.json({
+      success: true,
+      time: new Date().toISOString(),
+      dbState: supabase ? 'connected' : 'disconnected',
+      mechanicCount: count || 0,
+    });
   } catch (err) {
     console.error('ping error', err);
-    return res.status(500).json({ error: 'Ping failed' });
+    return res.status(500).json({ error: 'Ping failed', details: err.message });
   }
 };
 
@@ -173,7 +151,7 @@ exports.ping = async (req, res) => {
  */
 exports.updateLocation = async (req, res) => {
   try {
-    const uid = req.user && req.user.id;
+    const uid = req.user?.id;
     if (!uid) return res.status(401).json({ error: 'Unauthorized' });
 
     const { lat, lng } = req.body;
@@ -181,52 +159,116 @@ exports.updateLocation = async (req, res) => {
       return res.status(400).json({ error: 'Latitude and longitude are required' });
     }
 
-    const updated = await upsertMechanicByUid(uid, {
-      currentLocation: { lat: Number(lat), lng: Number(lng) },
-    });
+    // Update mechanic location
+    const { data, error } = await supabase
+      .from('mechanic_locations')
+      .upsert({
+        mechanic_id: uid,
+        latitude: Number(lat),
+        longitude: Number(lng),
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'mechanic_id',
+      })
+      .select()
+      .single();
 
-    return res.json({ success: true, mechanic: updated });
+    if (error) {
+      throw error;
+    }
+
+    return res.json({
+      success: true,
+      mechanic: {
+        uid,
+        currentLocation: {
+          lat: parseFloat(data.latitude),
+          lng: parseFloat(data.longitude),
+        },
+        updatedAt: data.updated_at,
+      },
+    });
   } catch (err) {
     console.error('updateLocation error', err);
-    return res.status(500).json({ error: 'Failed to update location' });
+    return res.status(500).json({ error: 'Failed to update location', details: err.message });
   }
 };
 
 /**
  * GET /api/mechanic/nearby
- * Find nearby mechanics (public endpoint)
+ * Find nearby mechanics
  */
 exports.findNearby = async (req, res) => {
   try {
-    const { lat, lng, radius = 10000 } = req.query;
+    const { lat, lng, radius = 50000 } = req.query;
 
     if (!lat || !lng) {
       return res.status(400).json({ error: 'Latitude and longitude are required' });
     }
 
-    let mechanics;
-    if (usingMockDB()) {
-      mechanics = [];
-    } else {
-      mechanics = await Mechanic.find({
-        isOnline: true,
-        verificationStatus: 'approved',
-        'currentLocation.lat': { $exists: true },
-        'currentLocation.lng': { $exists: true },
-      }).lean();
+    // Get mechanic IDs from user_roles first
+    const { data: mechanicRoles, error: roleError } = await supabase
+      .from('user_roles')
+      .select('user_id')
+      .eq('role', 'mechanic');
+
+    if (roleError || !mechanicRoles || mechanicRoles.length === 0) {
+      return res.json({ success: true, mechanics: [] });
     }
 
-    const nearest = findNearestMechanics(
-      mechanics,
-      Number(lat),
-      Number(lng),
-      Number(radius)
-    );
+    const mechanicIds = mechanicRoles.map(r => r.user_id);
 
-    return res.json({ success: true, mechanics: nearest });
+    // Get online and verified mechanics with locations
+    const { data: mechanics, error } = await supabase
+      .from('profiles')
+      .select(`
+        id,
+        full_name,
+        phone,
+        services,
+        verification_status,
+        availability_status,
+        mechanic_locations!inner(latitude, longitude)
+      `)
+      .in('id', mechanicIds)
+      .eq('availability_status', 'online')
+      .eq('verification_status', 'approved');
+
+    if (error) {
+      throw error;
+    }
+
+    if (!mechanics || mechanics.length === 0) {
+      return res.json({ success: true, mechanics: [] });
+    }
+
+    // Calculate distances and filter
+    const mechanicsWithDistance = mechanics
+      .filter(m => m.mechanic_locations && m.mechanic_locations.length > 0)
+      .map(m => {
+        const location = m.mechanic_locations[0];
+        const distance = calculateDistance(
+          Number(lat),
+          Number(lng),
+          parseFloat(location.latitude),
+          parseFloat(location.longitude)
+        );
+        return {
+          uid: m.id,
+          fullName: m.full_name,
+          phone: m.phone,
+          services: m.services || [],
+          isOnline: m.availability_status === 'online',
+          distance: Math.round(distance),
+        };
+      })
+      .filter(m => m.distance <= Number(radius))
+      .sort((a, b) => a.distance - b.distance);
+
+    return res.json({ success: true, mechanics: mechanicsWithDistance });
   } catch (err) {
     console.error('findNearby error', err);
-    return res.status(500).json({ error: 'Failed to find nearby mechanics' });
+    return res.status(500).json({ error: 'Failed to find nearby mechanics', details: err.message });
   }
 };
 
@@ -236,26 +278,31 @@ exports.findNearby = async (req, res) => {
  */
 exports.getRequests = async (req, res) => {
   try {
-    const uid = req.user && req.user.id;
+    const uid = req.user?.id;
     if (!uid) return res.status(401).json({ error: 'Unauthorized' });
 
-    const Request = require('../models/Request');
     const { status, limit = 50 } = req.query;
 
-    let requests = [];
-    if (!usingMockDB()) {
-      const query = { mechanicId: uid };
-      if (status) query.status = status;
+    let query = supabase
+      .from('job_requests')
+      .select('*')
+      .eq('mechanic_id', uid)
+      .order('created_at', { ascending: false })
+      .limit(parseInt(limit));
 
-      requests = await Request.find(query)
-        .sort({ createdAt: -1 })
-        .limit(parseInt(limit))
-        .lean();
+    if (status) {
+      query = query.eq('status', status);
     }
 
-    return res.json({ success: true, requests });
+    const { data: requests, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    return res.json({ success: true, requests: requests || [] });
   } catch (err) {
     console.error('getRequests error', err);
-    return res.status(500).json({ error: 'Failed to get requests' });
+    return res.status(500).json({ error: 'Failed to get requests', details: err.message });
   }
 };

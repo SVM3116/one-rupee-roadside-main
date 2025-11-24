@@ -1,12 +1,4 @@
-const Mechanic = require('../models/Mechanic');
-const Request = require('../models/Request');
-const User = require('../models/User');
-const Rating = require('../models/Rating');
-const mongoose = require('mongoose');
-
-function usingMockDB() {
-  return mongoose.connection.readyState !== 1;
-}
+const { supabase } = require('../utils/supabase');
 
 /**
  * GET /api/admin/stats
@@ -14,35 +6,60 @@ function usingMockDB() {
  */
 exports.getStats = async (req, res) => {
   try {
-    let stats = {
-      users: 0,
-      mechanics: 0,
-      requests: 0,
-      completedRequests: 0,
-      pendingRequests: 0,
-      ratings: 0,
-      averageRating: 0,
-    };
+    // Count users
+    const { count: userCount } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'user');
 
-    if (!usingMockDB()) {
-      stats.users = await User.countDocuments();
-      stats.mechanics = await Mechanic.countDocuments();
-      stats.requests = await Request.countDocuments();
-      stats.completedRequests = await Request.countDocuments({ status: 'completed' });
-      stats.pendingRequests = await Request.countDocuments({ status: 'pending' });
-      stats.ratings = await Rating.countDocuments();
+    // Count mechanics
+    const { count: mechanicCount } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'mechanic');
 
-      const allRatings = await Rating.find().lean();
-      if (allRatings.length > 0) {
-        const total = allRatings.reduce((sum, r) => sum + r.rating, 0);
-        stats.averageRating = Math.round((total / allRatings.length) * 10) / 10;
-      }
+    // Count requests
+    const { count: requestCount } = await supabase
+      .from('job_requests')
+      .select('*', { count: 'exact', head: true });
+
+    // Count completed requests
+    const { count: completedCount } = await supabase
+      .from('job_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'completed');
+
+    // Count pending requests
+    const { count: pendingCount } = await supabase
+      .from('job_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending');
+
+    // Count ratings and calculate average
+    const { count: ratingCount, data: ratings } = await supabase
+      .from('testimonials')
+      .select('rating');
+
+    let averageRating = 0;
+    if (ratings && ratings.length > 0) {
+      const total = ratings.reduce((sum, r) => sum + (r.rating || 0), 0);
+      averageRating = Math.round((total / ratings.length) * 10) / 10;
     }
+
+    const stats = {
+      users: userCount || 0,
+      mechanics: mechanicCount || 0,
+      requests: requestCount || 0,
+      completedRequests: completedCount || 0,
+      pendingRequests: pendingCount || 0,
+      ratings: ratingCount || 0,
+      averageRating,
+    };
 
     return res.json({ success: true, stats });
   } catch (err) {
     console.error('getStats error', err);
-    return res.status(500).json({ error: 'Failed to get statistics' });
+    return res.status(500).json({ error: 'Failed to get statistics', details: err.message });
   }
 };
 
@@ -54,22 +71,47 @@ exports.getMechanics = async (req, res) => {
   try {
     const { verificationStatus, isOnline, limit = 100 } = req.query;
 
-    let mechanics = [];
-    if (!usingMockDB()) {
-      const query = {};
-      if (verificationStatus) query.verificationStatus = verificationStatus;
-      if (isOnline !== undefined) query.isOnline = isOnline === 'true';
+    let query = supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'mechanic')
+      .order('created_at', { ascending: false })
+      .limit(parseInt(limit));
 
-      mechanics = await Mechanic.find(query)
-        .sort({ createdAt: -1 })
-        .limit(parseInt(limit))
-        .lean();
+    if (verificationStatus) {
+      query = query.eq('verification_status', verificationStatus);
+    }
+    if (isOnline !== undefined) {
+      const status = isOnline === 'true' ? 'online' : 'offline';
+      query = query.eq('availability_status', status);
     }
 
-    return res.json({ success: true, mechanics });
+    const { data: mechanics, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    // Format response
+    const formattedMechanics = (mechanics || []).map(m => ({
+      uid: m.id,
+      fullName: m.full_name,
+      email: m.email,
+      phone: m.phone,
+      isOnline: m.availability_status === 'online',
+      availabilityStatus: m.availability_status,
+      verificationStatus: m.verification_status,
+      services: m.services || [],
+      workLocation: m.work_location,
+      pincode: m.pincode,
+      createdAt: m.created_at,
+      updatedAt: m.updated_at,
+    }));
+
+    return res.json({ success: true, mechanics: formattedMechanics });
   } catch (err) {
     console.error('getMechanics error', err);
-    return res.status(500).json({ error: 'Failed to get mechanics' });
+    return res.status(500).json({ error: 'Failed to get mechanics', details: err.message });
   }
 };
 
@@ -80,8 +122,8 @@ exports.getMechanics = async (req, res) => {
 exports.verifyMechanic = async (req, res) => {
   try {
     const { mechanicId } = req.params;
-    const { action, reason } = req.body; // action: 'approve' or 'reject'
-    const adminId = req.user && req.user.id;
+    const { action, reason } = req.body;
+    const adminId = req.user?.id;
 
     if (!action || !['approve', 'reject'].includes(action)) {
       return res.status(400).json({ error: 'Invalid action. Must be "approve" or "reject"' });
@@ -91,36 +133,54 @@ exports.verifyMechanic = async (req, res) => {
       return res.status(400).json({ error: 'Reason is required for rejection' });
     }
 
-    if (usingMockDB()) {
-      return res.json({
-        success: true,
-        mechanic: { uid: mechanicId, verificationStatus: action === 'approve' ? 'approved' : 'rejected' },
-        message: `Mechanic ${action}d successfully`,
-      });
-    }
-
     const verificationStatus = action === 'approve' ? 'approved' : 'rejected';
-    const mechanic = await Mechanic.findOneAndUpdate(
-      { uid: mechanicId },
-      { verificationStatus },
-      { new: true }
-    ).lean();
 
-    if (!mechanic) {
+    // Update mechanic profile
+    const { data: mechanic, error } = await supabase
+      .from('profiles')
+      .update({
+        verification_status: verificationStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', mechanicId)
+      .eq('role', 'mechanic')
+      .select()
+      .single();
+
+    if (error || !mechanic) {
       return res.status(404).json({ error: 'Mechanic not found' });
     }
 
-    // In production, you would log this to mechanic_verification_logs table in Supabase
-    // For now, we'll just return success
+    // Create verification log
+    await supabase.from('mechanic_verification_logs').insert({
+      mechanic_id: mechanicId,
+      admin_id: adminId,
+      action: action === 'approve' ? 'approved' : 'rejected',
+      reason: reason || null,
+    });
+
+    // Create notification for mechanic
+    await supabase.from('notifications').insert({
+      user_id: mechanicId,
+      type: action === 'approve' ? 'verification_approved' : 'verification_rejected',
+      title: action === 'approve' ? 'Verification Approved' : 'Verification Rejected',
+      message: action === 'approve'
+        ? 'Your mechanic account has been verified and approved.'
+        : `Your mechanic account verification has been rejected. Reason: ${reason}`,
+      data: { action, reason },
+    });
 
     return res.json({
       success: true,
-      mechanic,
+      mechanic: {
+        uid: mechanic.id,
+        verificationStatus: mechanic.verification_status,
+      },
       message: `Mechanic ${action}d successfully`,
     });
   } catch (err) {
     console.error('verifyMechanic error', err);
-    return res.status(500).json({ error: 'Failed to verify mechanic' });
+    return res.status(500).json({ error: 'Failed to verify mechanic', details: err.message });
   }
 };
 
@@ -130,23 +190,40 @@ exports.verifyMechanic = async (req, res) => {
  */
 exports.getRequests = async (req, res) => {
   try {
-    const { status, limit = 100 } = req.query;
+    const { status, limit = 100, start_date, end_date, user_id, mechanic_id } = req.query;
 
-    let requests = [];
-    if (!usingMockDB()) {
-      const query = {};
-      if (status) query.status = status;
+    let query = supabase
+      .from('job_requests')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(parseInt(limit));
 
-      requests = await Request.find(query)
-        .sort({ createdAt: -1 })
-        .limit(parseInt(limit))
-        .lean();
+    if (status) {
+      query = query.eq('status', status);
+    }
+    if (user_id) {
+      query = query.eq('user_id', user_id);
+    }
+    if (mechanic_id) {
+      query = query.eq('mechanic_id', mechanic_id);
+    }
+    if (start_date) {
+      query = query.gte('created_at', start_date);
+    }
+    if (end_date) {
+      query = query.lte('created_at', end_date);
     }
 
-    return res.json({ success: true, requests });
+    const { data: requests, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    return res.json({ success: true, requests: requests || [] });
   } catch (err) {
     console.error('getRequests error', err);
-    return res.status(500).json({ error: 'Failed to get requests' });
+    return res.status(500).json({ error: 'Failed to get requests', details: err.message });
   }
 };
 
@@ -163,27 +240,28 @@ exports.assignMechanic = async (req, res) => {
       return res.status(400).json({ error: 'Mechanic ID is required' });
     }
 
-    if (usingMockDB()) {
-      return res.json({
-        success: true,
-        request: { requestId, mechanicId, status: 'pending' },
-        message: 'Mechanic assigned successfully',
-      });
-    }
+    const { data: request, error } = await supabase
+      .from('job_requests')
+      .update({
+        mechanic_id: mechanicId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', requestId)
+      .select()
+      .single();
 
-    const request = await Request.findOneAndUpdate(
-      { requestId },
-      {
-        mechanicId,
-        assignedAt: new Date(),
-        status: 'pending', // Mechanic still needs to accept
-      },
-      { new: true }
-    ).lean();
-
-    if (!request) {
+    if (error || !request) {
       return res.status(404).json({ error: 'Request not found' });
     }
+
+    // Create notification for mechanic
+    await supabase.from('notifications').insert({
+      user_id: mechanicId,
+      type: 'mechanic_assigned',
+      title: 'New Job Assigned',
+      message: `You have been assigned a new service request`,
+      data: { request_id: requestId },
+    });
 
     return res.json({
       success: true,
@@ -192,7 +270,7 @@ exports.assignMechanic = async (req, res) => {
     });
   } catch (err) {
     console.error('assignMechanic error', err);
-    return res.status(500).json({ error: 'Failed to assign mechanic' });
+    return res.status(500).json({ error: 'Failed to assign mechanic', details: err.message });
   }
 };
 
@@ -204,18 +282,31 @@ exports.getUsers = async (req, res) => {
   try {
     const { limit = 100 } = req.query;
 
-    let users = [];
-    if (!usingMockDB()) {
-      users = await User.find()
-        .sort({ createdAt: -1 })
-        .limit(parseInt(limit))
-        .lean();
+    const { data: users, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'user')
+      .order('created_at', { ascending: false })
+      .limit(parseInt(limit));
+
+    if (error) {
+      throw error;
     }
 
-    return res.json({ success: true, users });
+    // Format response
+    const formattedUsers = (users || []).map(u => ({
+      uid: u.id,
+      email: u.email,
+      fullName: u.full_name,
+      phone: u.phone,
+      status: u.status,
+      createdAt: u.created_at,
+      updatedAt: u.updated_at,
+    }));
+
+    return res.json({ success: true, users: formattedUsers });
   } catch (err) {
     console.error('getUsers error', err);
-    return res.status(500).json({ error: 'Failed to get users' });
+    return res.status(500).json({ error: 'Failed to get users', details: err.message });
   }
 };
-

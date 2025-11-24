@@ -1,33 +1,4 @@
-const User = require('../models/User');
-const mongoose = require('mongoose');
-
-// In-memory fallback store for development when MongoDB isn't available
-const IN_MEMORY_USERS = new Map();
-
-function usingMockDB() {
-  return mongoose.connection.readyState !== 1;
-}
-
-async function upsertUserByUid(uid, data) {
-  if (usingMockDB()) {
-    const existing = IN_MEMORY_USERS.get(uid) || { uid, createdAt: new Date().toISOString() };
-    const updated = { ...existing, ...data, uid, updatedAt: new Date().toISOString() };
-    IN_MEMORY_USERS.set(uid, updated);
-    return updated;
-  }
-
-  let updated = await User.findOneAndUpdate(
-    { uid },
-    { ...data, updatedAt: new Date() },
-    { new: true, runValidators: true, upsert: true }
-  ).lean();
-  return updated;
-}
-
-async function findUserByUid(uid) {
-  if (usingMockDB()) return IN_MEMORY_USERS.get(uid) || null;
-  return await User.findOne({ uid }).lean();
-}
+const { supabase } = require('../utils/supabase');
 
 /**
  * GET /api/user/profile
@@ -35,18 +6,35 @@ async function findUserByUid(uid) {
  */
 exports.getProfile = async (req, res) => {
   try {
-    const uid = req.user && req.user.id;
+    const uid = req.user?.id;
     if (!uid) return res.status(401).json({ error: 'Unauthorized' });
 
-    const user = await findUserByUid(uid);
-    if (!user) {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', uid)
+      .single();
+
+    if (error || !profile) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    // Format response to match expected format
+    const user = {
+      uid: profile.id,
+      email: profile.email,
+      fullName: profile.full_name,
+      phone: profile.phone,
+      role: profile.role,
+      status: profile.status,
+      createdAt: profile.created_at,
+      updatedAt: profile.updated_at,
+    };
 
     return res.json({ success: true, user });
   } catch (err) {
     console.error('getProfile error', err);
-    return res.status(500).json({ error: 'Failed to get user profile' });
+    return res.status(500).json({ error: 'Failed to get user profile', details: err.message });
   }
 };
 
@@ -56,25 +44,62 @@ exports.getProfile = async (req, res) => {
  */
 exports.updateProfile = async (req, res) => {
   try {
-    const uid = req.user && req.user.id;
+    const uid = req.user?.id;
     if (!uid) return res.status(401).json({ error: 'Unauthorized' });
 
     const { fullName, phone, location } = req.body;
-    const updateData = {};
+    const updateData = {
+      updated_at: new Date().toISOString(),
+    };
 
-    if (fullName !== undefined) updateData.fullName = fullName;
+    if (fullName !== undefined) updateData.full_name = fullName;
     if (phone !== undefined) updateData.phone = phone;
-    if (location !== undefined) {
-      if (location.lat && location.lng) {
-        updateData.location = { lat: location.lat, lng: location.lng };
+
+    const { data: updated, error } = await supabase
+      .from('profiles')
+      .update(updateData)
+      .eq('id', uid)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    // Update location in user_locations table if provided
+    if (location && location.lat && location.lng) {
+      const { error: locationError } = await supabase
+        .from('user_locations')
+        .upsert({
+          user_id: uid,
+          latitude: Number(location.lat),
+          longitude: Number(location.lng),
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id',
+        });
+
+      if (locationError) {
+        console.error('Failed to update user location:', locationError);
       }
     }
 
-    const updated = await upsertUserByUid(uid, updateData);
-    return res.json({ success: true, user: updated });
+    // Format response
+    const user = {
+      uid: updated.id,
+      email: updated.email,
+      fullName: updated.full_name,
+      phone: updated.phone,
+      role: updated.role,
+      status: updated.status,
+      createdAt: updated.created_at,
+      updatedAt: updated.updated_at,
+    };
+
+    return res.json({ success: true, user });
   } catch (err) {
     console.error('updateProfile error', err);
-    return res.status(500).json({ error: 'Failed to update profile' });
+    return res.status(500).json({ error: 'Failed to update profile', details: err.message });
   }
 };
 
@@ -84,7 +109,7 @@ exports.updateProfile = async (req, res) => {
  */
 exports.updateLocation = async (req, res) => {
   try {
-    const uid = req.user && req.user.id;
+    const uid = req.user?.id;
     if (!uid) return res.status(401).json({ error: 'Unauthorized' });
 
     const { lat, lng } = req.body;
@@ -92,14 +117,36 @@ exports.updateLocation = async (req, res) => {
       return res.status(400).json({ error: 'Latitude and longitude are required' });
     }
 
-    const updated = await upsertUserByUid(uid, {
-      location: { lat: Number(lat), lng: Number(lng) },
-    });
+    const { data, error } = await supabase
+      .from('user_locations')
+      .upsert({
+        user_id: uid,
+        latitude: Number(lat),
+        longitude: Number(lng),
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id',
+      })
+      .select()
+      .single();
 
-    return res.json({ success: true, user: updated });
+    if (error) {
+      throw error;
+    }
+
+    // Format response
+    const user = {
+      uid: data.user_id,
+      location: {
+        lat: parseFloat(data.latitude),
+        lng: parseFloat(data.longitude),
+      },
+      updatedAt: data.updated_at,
+    };
+
+    return res.json({ success: true, user });
   } catch (err) {
     console.error('updateLocation error', err);
-    return res.status(500).json({ error: 'Failed to update location' });
+    return res.status(500).json({ error: 'Failed to update location', details: err.message });
   }
 };
-

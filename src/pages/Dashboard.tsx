@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,9 @@ import TrackingPanel from "@/components/TrackingPanel";
 import RequestAssistanceForm from "@/components/RequestAssistanceForm";
 import MyRequests from "@/components/MyRequests";
 import LocationRequired from "@/components/LocationRequired";
+import OnboardingTour from "@/components/OnboardingTour";
+import ChatNotificationBadge from "@/components/ChatNotificationBadge";
+import { useChatNotifications } from "@/hooks/useChatNotifications";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -27,118 +30,31 @@ const Dashboard = () => {
   const [locationSharing, setLocationSharing] = useState(false);
   const [locationWatchId, setLocationWatchId] = useState<number | null>(null);
   const [locationRequired, setLocationRequired] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(true);
+
+  // Chat notifications
+  const { 
+    getUnreadCount, 
+    markAsRead, 
+    setOpenChatRequestId, 
+    openChatRequestId,
+    latestNotification,
+    clearLatestNotification,
+    totalUnreadCount 
+  } = useChatNotifications(user?.id || null, userRole);
+
+  // Stable callback for marking chat as read
+  const handleChatOpen = useCallback((requestId: string) => {
+    markAsRead(requestId);
+    setOpenChatRequestId(requestId);
+    clearLatestNotification();
+  }, [markAsRead, setOpenChatRequestId, clearLatestNotification]);
 
   useEffect(() => {
     checkUser();
-    
-    // Store navigation type at page load time
-    let navigationType: string | number | null = null;
-    try {
-      // Modern API: Performance Navigation Timing
-      const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
-      if (navEntries.length > 0) {
-        navigationType = navEntries[0].type;
-      } else if ((performance as any).navigation) {
-        // Fallback: Legacy API
-        navigationType = (performance as any).navigation.type;
-      }
-    } catch (error) {
-      console.error("Error checking navigation type:", error);
-    }
-    
-    // Set a flag on page load to help detect rapid refreshes
-    const pageLoadTime = Date.now();
-    sessionStorage.setItem('page_load_time', pageLoadTime.toString());
-    
-    // Clear the flag after a delay (refresh typically happens within 1-2 seconds)
-    const clearFlagTimeout = setTimeout(() => {
-      sessionStorage.removeItem('page_load_time');
-    }, 2000);
-    
-    // Helper function to check if this is likely a refresh
-    const isLikelyRefresh = (): boolean => {
-      // Method 1: Check navigation type (if page was loaded via reload)
-      if (navigationType === 'reload' || navigationType === 1) {
-        return true;
-      }
-      
-      // Method 2: Check if page was just loaded (rapid unload = likely refresh)
-      const loadTime = sessionStorage.getItem('page_load_time');
-      if (loadTime) {
-        const timeSinceLoad = Date.now() - parseInt(loadTime, 10);
-        // If unload happens within 2 seconds of load, likely a refresh
-        if (timeSinceLoad < 2000) {
-          return true;
-        }
-      }
-      
-      return false;
-    };
-    
-    // Primary handler: pagehide (more reliable on mobile, fires after beforeunload)
-    const handlePageHide = (e: PageTransitionEvent) => {
-      // e.persisted = false means page is being discarded (tab close or navigation away)
-      // e.persisted = true means page is cached (back/forward navigation, won't be discarded)
-      if (!e.persisted) {
-        // Check if this is likely a refresh - if so, don't logout
-        const likelyRefresh = isLikelyRefresh();
-        
-        if (!likelyRefresh) {
-          // Tab/window is being closed or user navigated away (not a refresh)
-          try {
-            // Sign out from Supabase
-            supabase.auth.signOut().catch(() => {
-              // Ignore errors if tab is already closed
-            });
-            
-            // Clear storage
-            localStorage.clear();
-            sessionStorage.clear();
-          } catch (error) {
-            console.error("Error signing out on page hide:", error);
-          }
-        } else {
-          // Clear the flag if it exists (refresh case)
-          sessionStorage.removeItem('page_load_time');
-        }
-      }
-    };
-    
-    // Secondary handler: beforeunload (backup, fires before pagehide)
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Check if this is likely a refresh
-      const likelyRefresh = isLikelyRefresh();
-      
-      if (!likelyRefresh) {
-        // Tab/window is being closed or navigating away, not refreshed
-        try {
-          // Sign out from Supabase (async, may not complete but we try)
-          supabase.auth.signOut().catch(() => {
-            // Ignore errors if tab is already closed
-          });
-          
-          // Clear storage immediately
-          localStorage.clear();
-          sessionStorage.clear();
-        } catch (error) {
-          console.error("Error signing out on tab close:", error);
-        }
-      } else {
-        // Clear the flag if it exists (refresh case)
-        sessionStorage.removeItem('page_load_time');
-      }
-    };
-    
-    // Add event listeners
-    // pagehide is more reliable on mobile and fires after beforeunload
-    window.addEventListener('pagehide', handlePageHide);
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-    return () => {
-      clearTimeout(clearFlagTimeout);
-      window.removeEventListener('pagehide', handlePageHide);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
+    // Removed auto-logout on page hide/refresh to prevent blank screens
+    // Session persistence is handled by Supabase automatically
   }, []);
 
   // MANDATORY: Start location sharing when user logs in (only for travelers/users)
@@ -269,26 +185,6 @@ const Dashboard = () => {
 
       setUser(session.user);
 
-      // Fetch user profile to get photo and name (use maybeSingle to handle missing profiles)
-      try {
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("full_name, profile_photo")
-          .eq("id", session.user.id)
-          .maybeSingle();
-
-        if (profileData) {
-          setProfilePhoto(profileData.profile_photo || null);
-          setProfileName(profileData.full_name || session.user.user_metadata?.full_name || session.user.email || "User");
-        } else {
-          setProfileName(session.user.user_metadata?.full_name || session.user.email || "User");
-        }
-      } catch (profileError) {
-        console.error("Error fetching profile:", profileError);
-        // Continue even if profile fetch fails
-        setProfileName(session.user.user_metadata?.full_name || session.user.email || "User");
-      }
-
       // Fetch user role from user_roles table
       const { data: roleData, error: roleError } = await supabase
         .from("user_roles")
@@ -311,6 +207,84 @@ const Dashboard = () => {
       }
       
       setUserRole(resolvedRole);
+
+      // Fetch user profile to get photo and name (use maybeSingle to handle missing profiles)
+      try {
+        // First try to select with onboarding_completed, but handle if column doesn't exist
+        let { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("full_name, profile_photo, onboarding_completed")
+          .eq("id", session.user.id)
+          .maybeSingle();
+
+        // If error suggests column doesn't exist, try without it
+        // If profile exists but column doesn't, this is an EXISTING user - mark onboarding as completed
+        if (profileError && profileError.message?.includes('onboarding_completed')) {
+          const { data: simpleProfile, error: simpleError } = await supabase
+            .from("profiles")
+            .select("full_name, profile_photo")
+            .eq("id", session.user.id)
+            .maybeSingle();
+          
+          if (!simpleError && simpleProfile) {
+            // Profile exists but onboarding column doesn't - this is an EXISTING user
+            // Mark onboarding as completed (true) for existing users
+            profileData = { ...simpleProfile, onboarding_completed: true };
+            profileError = null;
+          }
+        }
+
+        if (!profileError && profileData) {
+          // Profile exists - this is an existing user
+          setProfilePhoto(profileData.profile_photo || null);
+          setProfileName(profileData.full_name || session.user.user_metadata?.full_name || session.user.email || "User");
+          
+          const onboardingStatus = (profileData as any).onboarding_completed;
+          
+          // If onboarding_completed is NULL (existing user before column was added), mark as completed
+          if (onboardingStatus === null || onboardingStatus === undefined) {
+            // This is an existing user - update their profile to mark onboarding as completed
+            // This prevents the tour from showing on future logins
+            supabase
+              .from("profiles")
+              .update({ onboarding_completed: true })
+              .eq("id", session.user.id)
+              .then(({ error }) => {
+                if (error) {
+                  console.warn("Could not update onboarding_completed for existing user:", error.message);
+                } else {
+                  console.log("✅ Marked existing user onboarding as completed");
+                }
+              });
+            
+            setOnboardingCompleted(true);
+          } else if (onboardingStatus === false) {
+            // Explicitly marked as incomplete - new user, show onboarding
+            setOnboardingCompleted(false);
+            if (resolvedRole !== "mechanic" && resolvedRole !== "admin") {
+              setTimeout(() => setShowOnboarding(true), 1000);
+            }
+          } else {
+            // Explicitly true - already completed
+            setOnboardingCompleted(true);
+          }
+        } else {
+          // No profile found - this is a TRULY NEW user (first login)
+          setProfileName(session.user.user_metadata?.full_name || session.user.email || "User");
+          setOnboardingCompleted(false);
+          // Only show onboarding for new users who are travelers/users
+          if (resolvedRole !== "mechanic" && resolvedRole !== "admin") {
+            setTimeout(() => setShowOnboarding(true), 1000);
+          }
+        }
+      } catch (profileError) {
+        console.error("Error fetching profile:", profileError);
+        // Continue even if profile fetch fails
+        setProfileName(session.user.user_metadata?.full_name || session.user.email || "User");
+        // If profile fetch fails, assume existing user (don't show onboarding)
+        // Don't show onboarding for error cases - only for confirmed new users
+        setOnboardingCompleted(true);
+      }
 
       // Redirect based on role
       if (resolvedRole === "mechanic") {
@@ -403,6 +377,13 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <OnboardingTour
+        run={showOnboarding}
+        onComplete={() => {
+          setShowOnboarding(false);
+          setOnboardingCompleted(true);
+        }}
+      />
       <Navbar />
       
       <div className="container mx-auto px-4 py-4 sm:py-8">
@@ -467,7 +448,10 @@ const Dashboard = () => {
           <div className="space-y-6">
             {/* Location Status */}
             {userLocation && (
-              <Card className="p-4 bg-green-50 dark:bg-green-950 border-green-200">
+              <Card 
+                className="p-4 bg-green-50 dark:bg-green-950 border-green-200"
+                data-tour="location-permission"
+              >
                 <div className="flex items-center gap-2">
                   <MapPin className="h-5 w-5 text-green-600" />
                   <span className="text-sm font-medium text-green-800 dark:text-green-200">
@@ -478,15 +462,17 @@ const Dashboard = () => {
             )}
 
             {trackingMechanicId ? (
-              <LiveLocationTracker
-                apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || undefined}
-                userLocation={userLocation || undefined}
-                mechanicId={trackingMechanicId}
-                showRoute={true}
-                mode="user"
-              />
+              <div data-tour="live-tracking">
+                <LiveLocationTracker
+                  apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || undefined}
+                  userLocation={userLocation || undefined}
+                  mechanicId={trackingMechanicId}
+                  showRoute={true}
+                  mode="user"
+                />
+              </div>
             ) : (
-              <Card className="p-6">
+              <Card className="p-6" data-tour="live-tracking">
                 <h2 className="text-2xl font-bold mb-4">Find Nearby Mechanics</h2>
                 {import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? (
                   <Map 
@@ -514,11 +500,22 @@ const Dashboard = () => {
                     setTrackingMechanicId(mechanicId);
                     setActiveJobId(jobId);
                   }}
+                  getUnreadCount={getUnreadCount}
+                  onChatOpen={handleChatOpen}
                 />
                 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <RequestAssistanceForm initialLocation={userLocation} />
-                  <MyRequests userId={user.id} />
+                  <div data-tour="request-assistance">
+                    <RequestAssistanceForm initialLocation={userLocation} />
+                  </div>
+                  <div data-tour="my-requests">
+                    <MyRequests 
+                      userId={user.id}
+                      getUnreadCount={getUnreadCount}
+                      onChatOpen={handleChatOpen}
+                      openChatRequestId={openChatRequestId}
+                    />
+                  </div>
                 </div>
               </>
             )}
@@ -543,6 +540,18 @@ const Dashboard = () => {
               </div>
             </div>
           </Card>
+        )}
+
+        {/* Chat Notification Badge - Shows when new messages arrive */}
+        {latestNotification && (
+          <ChatNotificationBadge
+            unreadCount={totalUnreadCount}
+            lastMessage={latestNotification.message}
+            onClick={() => {
+              handleChatOpen(latestNotification.requestId);
+              setOpenChatRequestId(latestNotification.requestId);
+            }}
+          />
         )}
       </div>
     </div>

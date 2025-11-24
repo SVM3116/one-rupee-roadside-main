@@ -82,15 +82,6 @@ const About = () => {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="pt-6 space-y-6">
-              <h2 className="text-3xl font-bold">Tagline</h2>
-              <p className="text-2xl font-semibold text-orange-500">
-                "When Roads Stop You, We Don't."
-              </p>
-            </CardContent>
-          </Card>
-
           {/* Meet Our Developers Section */}
           <div className="space-y-6">
             <div className="text-center">

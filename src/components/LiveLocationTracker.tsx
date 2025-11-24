@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import SimpleLocationDisplay from './SimpleLocationDisplay';
+import { calculateETA, formatDuration, formatDistance } from '@/utils/eta';
 
 const containerStyle = {
   width: '100%',
@@ -33,11 +34,14 @@ const LiveLocationTracker = ({
   const [mechanicLocation, setMechanicLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [distance, setDistance] = useState<number | null>(null);
   const [eta, setEta] = useState<string | null>(null);
+  const [distanceText, setDistanceText] = useState<string>('');
+  const [etaCalculating, setEtaCalculating] = useState(false);
   const [isLive, setIsLive] = useState(false);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<{ user?: google.maps.Marker; mechanic?: google.maps.Marker }>({});
+  const etaIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Calculate distance between two points
+  // Calculate distance between two points (fallback)
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
     const R = 6371; // Radius of the Earth in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -48,20 +52,6 @@ const LiveLocationTracker = ({
       Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
-  };
-
-  // Calculate ETA (estimated time of arrival) in minutes
-  const calculateETA = (distanceKm: number): string => {
-    // Assuming average speed of 30 km/h in city traffic
-    const avgSpeedKmh = 30;
-    const timeHours = distanceKm / avgSpeedKmh;
-    const timeMinutes = Math.round(timeHours * 60);
-    
-    if (timeMinutes < 1) return 'Less than 1 min';
-    if (timeMinutes < 60) return `${timeMinutes} min`;
-    const hours = Math.floor(timeMinutes / 60);
-    const mins = timeMinutes % 60;
-    return `${hours}h ${mins}m`;
   };
 
   // Subscribe to user location updates
@@ -180,17 +170,67 @@ const LiveLocationTracker = ({
 
   // Update distance and ETA when locations change
   useEffect(() => {
-    if (userLocation && mechanicLocation) {
-      const dist = calculateDistance(
-        userLocation.lat,
-        userLocation.lng,
-        mechanicLocation.lat,
-        mechanicLocation.lng
-      );
-      setDistance(dist);
-      setEta(calculateETA(dist));
-    }
-  }, [userLocation, mechanicLocation]);
+    if (!userLocation || !mechanicLocation) return;
+
+    // Calculate fallback distance
+    const dist = calculateDistance(
+      userLocation.lat,
+      userLocation.lng,
+      mechanicLocation.lat,
+      mechanicLocation.lng
+    );
+    setDistance(dist);
+
+    // Use Google Maps Distance Matrix API if API key is available
+    const updateETA = async () => {
+      if (apiKey) {
+        setEtaCalculating(true);
+        try {
+          const origin = mode === 'user' ? mechanicLocation : userLocation;
+          const destination = mode === 'user' ? userLocation : mechanicLocation;
+          
+          const result = await calculateETA(origin, destination, apiKey);
+          if (result) {
+            setEta(formatDuration(result.duration.value));
+            setDistanceText(result.distance.text);
+            setDistance(result.distance.value / 1000); // Convert meters to km
+          } else {
+            // Fallback to estimated calculation
+            const avgSpeedKmh = 30;
+            const timeMinutes = Math.round((dist / avgSpeedKmh) * 60);
+            setEta(formatDuration(timeMinutes * 60));
+            setDistanceText(`${dist.toFixed(1)} km`);
+          }
+        } catch (error) {
+          console.error('Error calculating ETA:', error);
+          // Fallback to estimated calculation
+          const avgSpeedKmh = 30;
+          const timeMinutes = Math.round((dist / avgSpeedKmh) * 60);
+          setEta(formatDuration(timeMinutes * 60));
+          setDistanceText(`${dist.toFixed(1)} km`);
+        } finally {
+          setEtaCalculating(false);
+        }
+      } else {
+        // Fallback to estimated calculation
+        const avgSpeedKmh = 30;
+        const timeMinutes = Math.round((dist / avgSpeedKmh) * 60);
+        setEta(formatDuration(timeMinutes * 60));
+        setDistanceText(`${dist.toFixed(1)} km`);
+      }
+    };
+
+    updateETA();
+
+    // Update ETA every 30 seconds if both locations are available
+    etaIntervalRef.current = setInterval(updateETA, 30000);
+
+    return () => {
+      if (etaIntervalRef.current) {
+        clearInterval(etaIntervalRef.current);
+      }
+    };
+  }, [userLocation, mechanicLocation, apiKey, mode]);
 
   // Center map on both locations
   useEffect(() => {
@@ -255,12 +295,12 @@ const LiveLocationTracker = ({
           <div className="flex items-center gap-4">
             <Badge variant="outline" className="gap-2">
               <Navigation className="h-3 w-3" />
-              {distance.toFixed(2)} km
+              {distanceText || `${distance.toFixed(2)} km`}
             </Badge>
             {eta && (
               <Badge variant="outline" className="gap-2">
                 <Clock className="h-3 w-3" />
-                {eta}
+                {etaCalculating ? 'Calculating...' : eta}
               </Badge>
             )}
           </div>

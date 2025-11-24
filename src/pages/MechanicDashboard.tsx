@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
@@ -13,6 +13,11 @@ import { toast } from "sonner";
 import Map from "@/components/Map";
 import LiveLocationTracker from "@/components/LiveLocationTracker";
 import MechanicOnlineToggle from "@/components/MechanicOnlineToggle";
+import ChatButton from "@/components/ChatButton";
+import { SkeletonList } from "@/components/SkeletonCard";
+import JobStatusManager from "@/components/JobStatusManager";
+import ChatNotificationBadge from "@/components/ChatNotificationBadge";
+import { useChatNotifications } from "@/hooks/useChatNotifications";
 import api from '@/lib/api';
 
 interface Job {
@@ -38,187 +43,302 @@ const MechanicDashboard = () => {
   const [lastLocationAt, setLastLocationAt] = useState<string | null>(null);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [profileName, setProfileName] = useState<string>("");
+  const lastJobCountRef = useRef<number>(0);
+  const [userRole, setUserRole] = useState<'mechanic' | 'user' | null>('mechanic');
+  
+  // Chat notifications
+  const { 
+    getUnreadCount, 
+    markAsRead, 
+    setOpenChatRequestId, 
+    latestNotification, 
+    clearLatestNotification,
+    totalUnreadCount 
+  } = useChatNotifications(user?.id || null, userRole);
+
+  // Stable callback for marking chat as read
+  const handleChatOpen = useCallback((requestId: string) => {
+    markAsRead(requestId);
+    setOpenChatRequestId(requestId);
+    clearLatestNotification();
+  }, [markAsRead, setOpenChatRequestId, clearLatestNotification]);
 
   useEffect(() => {
     checkMechanicAuth();
-    
-    // Store navigation type at page load time
-    let navigationType: string | number | null = null;
-    try {
-      // Modern API: Performance Navigation Timing
-      const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
-      if (navEntries.length > 0) {
-        navigationType = navEntries[0].type;
-      } else if ((performance as any).navigation) {
-        // Fallback: Legacy API
-        navigationType = (performance as any).navigation.type;
-      }
-    } catch (error) {
-      console.error("Error checking navigation type:", error);
-    }
-    
-    // Set a flag on page load to help detect rapid refreshes
-    const pageLoadTime = Date.now();
-    sessionStorage.setItem('page_load_time', pageLoadTime.toString());
-    
-    // Clear the flag after a delay (refresh typically happens within 1-2 seconds)
-    const clearFlagTimeout = setTimeout(() => {
-      sessionStorage.removeItem('page_load_time');
-    }, 2000);
-    
-    // Helper function to check if this is likely a refresh
-    const isLikelyRefresh = (): boolean => {
-      // Method 1: Check navigation type (if page was loaded via reload)
-      if (navigationType === 'reload' || navigationType === 1) {
-        return true;
-      }
-      
-      // Method 2: Check if page was just loaded (rapid unload = likely refresh)
-      const loadTime = sessionStorage.getItem('page_load_time');
-      if (loadTime) {
-        const timeSinceLoad = Date.now() - parseInt(loadTime, 10);
-        // If unload happens within 2 seconds of load, likely a refresh
-        if (timeSinceLoad < 2000) {
-          return true;
-        }
-      }
-      
-      return false;
-    };
-    
-    // Primary handler: pagehide (more reliable on mobile, fires after beforeunload)
-    const handlePageHide = (e: PageTransitionEvent) => {
-      // e.persisted = false means page is being discarded (tab close or navigation away)
-      // e.persisted = true means page is cached (back/forward navigation, won't be discarded)
-      if (!e.persisted) {
-        // Check if this is likely a refresh - if so, don't logout
-        const likelyRefresh = isLikelyRefresh();
-        
-        if (!likelyRefresh) {
-          // Tab/window is being closed or user navigated away (not a refresh)
-          try {
-            // Sign out from Supabase
-            supabase.auth.signOut().catch(() => {
-              // Ignore errors if tab is already closed
-            });
-            
-            // Clear storage
-            localStorage.clear();
-            sessionStorage.clear();
-          } catch (error) {
-            console.error("Error signing out on page hide:", error);
-          }
-        } else {
-          // Clear the flag if it exists (refresh case)
-          sessionStorage.removeItem('page_load_time');
-        }
-      }
-    };
-    
-    // Secondary handler: beforeunload (backup, fires before pagehide)
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Check if this is likely a refresh
-      const likelyRefresh = isLikelyRefresh();
-      
-      if (!likelyRefresh) {
-        // Tab/window is being closed or navigating away, not refreshed
-        try {
-          // Sign out from Supabase (async, may not complete but we try)
-          supabase.auth.signOut().catch(() => {
-            // Ignore errors if tab is already closed
-          });
-          
-          // Clear storage immediately
-          localStorage.clear();
-          sessionStorage.clear();
-        } catch (error) {
-          console.error("Error signing out on tab close:", error);
-        }
-      } else {
-        // Clear the flag if it exists (refresh case)
-        sessionStorage.removeItem('page_load_time');
-      }
-    };
-    
-    // Add event listeners
-    // pagehide is more reliable on mobile and fires after beforeunload
-    window.addEventListener('pagehide', handlePageHide);
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-    return () => {
-      clearTimeout(clearFlagTimeout);
-      window.removeEventListener('pagehide', handlePageHide);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
+    // Removed auto-logout on page hide/refresh to prevent blank screens
+    // Session persistence is handled by Supabase automatically
   }, []);
 
+  // Auto-start location sharing if mechanic is online on page load/refresh
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id || isSharing) return;
+
+    const checkAndStartLocationSharing = async () => {
+      try {
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+        if (!authSession) return;
+        
+        const token = authSession.access_token;
+        const headers: any = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+        
+        const statusRes = await api.get(`/api/mechanic/online-status/${user.id}`, { headers });
+        const isOnline = Boolean(statusRes.data?.status?.isOnline);
+        
+        if (isOnline) {
+          console.log("🟢 [MechanicDashboard] Mechanic is online on page load - auto-starting location sharing");
+          await startLocationSharing();
+        }
+      } catch (statusErr: any) {
+        // If 404, mechanic status not set yet (treat as offline - don't start sharing)
+        // Other errors: log but don't auto-start
+        if (statusErr?.response?.status !== 404) {
+          console.warn('[MechanicDashboard] Could not check online status for auto-start:', statusErr);
+        }
+      }
+    };
+
+    // Small delay to ensure component is fully mounted and user is ready
+    const timer = setTimeout(() => {
+      checkAndStartLocationSharing();
+    }, 1000);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]); // Only depend on user.id to avoid re-triggering
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log('🔧 Setting up realtime subscription for mechanic:', user.id);
 
     // Set up realtime subscription for new job assignments
+    // CRITICAL: Listen for ALL UPDATE events and filter client-side to catch assignments
     const channel = supabase
-      .channel('job-assignments')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'job_requests',
-          filter: `mechanic_id=eq.${user.id}`,
-        },
-        (payload) => {
-          console.log('New job assigned:', payload);
-          const newJob = payload.new as Job;
-          
-          // Show notification
-          toast.success(
-            `New job assigned! ${newJob.vehicle_type || 'Vehicle'} - ${newJob.issue_description}`,
-            {
-              duration: 5000,
-            }
-          );
-
-          // Add to jobs list
-          setJobs(prevJobs => [
-            {
-              ...newJob,
-              user_location: newJob.user_location as { lat: number; lng: number }
-            },
-            ...prevJobs
-          ]);
-        }
-      )
+      .channel(`job-assignments-${user.id}`)
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
           table: 'job_requests',
-          filter: `mechanic_id=eq.${user.id}`,
+          // No filter - we need to catch all UPDATEs to detect mechanic_id changes
         },
         (payload) => {
-          console.log('Job updated:', payload);
+          console.log('📨 Job UPDATE event received:', payload);
           const updatedJob = payload.new as Job;
+          const oldJob = payload.old as any;
           
-          // Update job in list
-          setJobs(prevJobs =>
-            prevJobs.map(job =>
-              job.id === updatedJob.id
-                ? {
+          // Check if this job is now assigned to this mechanic
+          const isAssignedToMe = updatedJob.mechanic_id === user.id;
+          const wasAssignedToMe = oldJob?.mechanic_id === user.id;
+          const wasJustAssigned = !wasAssignedToMe && isAssignedToMe;
+          
+          console.log('🔍 Assignment check:', {
+            jobId: updatedJob.id,
+            isAssignedToMe,
+            wasAssignedToMe,
+            wasJustAssigned,
+            newMechanicId: updatedJob.mechanic_id,
+            oldMechanicId: oldJob?.mechanic_id
+          });
+          
+          // If job was just assigned to this mechanic, add it to the list
+          if (wasJustAssigned) {
+            console.log('🆕 NEW JOB ASSIGNED TO MECHANIC:', updatedJob.id);
+            
+            // Parse user_location if it's a string
+            let userLocation = updatedJob.user_location;
+            if (typeof userLocation === 'string') {
+              try {
+                userLocation = JSON.parse(userLocation);
+              } catch (e) {
+                console.warn('Failed to parse user_location:', e);
+                userLocation = null;
+              }
+            }
+            
+            // Show notification
+            toast.success(
+              `New job assigned! ${updatedJob.vehicle_type || 'Vehicle'} - ${updatedJob.issue_description || 'No description'}`,
+              {
+                duration: 5000,
+              }
+            );
+            
+            // Add to jobs list (check if already exists to avoid duplicates)
+            setJobs(prevJobs => {
+              const exists = prevJobs.some(job => job.id === updatedJob.id);
+              if (exists) {
+                console.log('Job already in list, updating...');
+                // Update existing job
+                return prevJobs.map(job =>
+                  job.id === updatedJob.id
+                    ? {
+                        ...updatedJob,
+                        user_location: userLocation as { lat: number; lng: number } | null
+                      }
+                    : job
+                );
+              } else {
+                console.log('Adding new job to list');
+                // Add new job at the beginning
+                const newJobsList = [
+                  {
                     ...updatedJob,
-                    user_location: updatedJob.user_location as { lat: number; lng: number }
-                  }
-                : job
-            )
-          );
+                    user_location: userLocation as { lat: number; lng: number } | null
+                  },
+                  ...prevJobs
+                ];
+                // Update ref
+                lastJobCountRef.current = newJobsList.length;
+                return newJobsList;
+              }
+            });
+            
+            // Refresh jobs list to ensure we have the latest data
+            if (user?.id) {
+              setTimeout(() => {
+                fetchJobs(user.id);
+              }, 500);
+            }
+          } else if (isAssignedToMe) {
+            // Job is assigned to this mechanic - update it in the list
+            console.log('🔄 Updating existing assigned job:', updatedJob.id);
+            
+            // Parse user_location if needed
+            let userLocation = updatedJob.user_location;
+            if (typeof userLocation === 'string') {
+              try {
+                userLocation = JSON.parse(userLocation);
+              } catch (e) {
+                userLocation = null;
+              }
+            }
+            
+            // Update job in list
+            setJobs(prevJobs => {
+              const exists = prevJobs.some(job => job.id === updatedJob.id);
+              if (!exists) {
+                // Job not in list but assigned to us - add it
+                console.log('Job not in list but assigned to us - adding');
+                const newJobsList = [
+                  {
+                    ...updatedJob,
+                    user_location: userLocation as { lat: number; lng: number } | null
+                  },
+                  ...prevJobs
+                ];
+                // Update ref
+                lastJobCountRef.current = newJobsList.length;
+                return newJobsList;
+              }
+              // Update existing job
+              return prevJobs.map(job =>
+                job.id === updatedJob.id
+                  ? {
+                      ...updatedJob,
+                      user_location: userLocation as { lat: number; lng: number } | null
+                    }
+                  : job
+              );
+            });
+          }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 MechanicDashboard realtime subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Successfully subscribed to job request updates for mechanic:', user.id);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Error subscribing to job request updates');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Subscription timed out, retrying...');
+        }
+      });
+
+    // Initialize lastJobCountRef with current jobs count
+    lastJobCountRef.current = jobs.length;
+
+    // FALLBACK: Poll for new jobs every 3 seconds as a backup if realtime doesn't work
+    // This ensures jobs appear even if realtime subscription fails
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data: currentJobs, error } = await supabase
+          .from("job_requests")
+          .select("*")
+          .eq("mechanic_id", user.id)
+          .order("created_at", { ascending: false });
+
+        if (!error && currentJobs) {
+          const currentCount = currentJobs.length;
+          const lastCount = lastJobCountRef.current;
+          
+          // If we have more jobs than before, a new one was assigned
+          if (currentCount > lastCount) {
+            console.log('🔄 Polling detected new job assignment!', {
+              previous: lastCount,
+              current: currentCount
+            });
+            
+            // Use functional update to get latest jobs state
+            setJobs(prevJobs => {
+              const existingIds = new Set(prevJobs.map(j => j.id));
+              
+              // Find the new job(s) that aren't in our list
+              const newJobs = currentJobs.filter(newJob => !existingIds.has(newJob.id));
+              
+              if (newJobs.length > 0) {
+                const formattedNewJobs = newJobs.map(job => {
+                  let userLocation = job.user_location;
+                  if (typeof userLocation === 'string') {
+                    try {
+                      userLocation = JSON.parse(userLocation);
+                    } catch (e) {
+                      userLocation = null;
+                    }
+                  }
+                  return {
+                    ...job,
+                    user_location: userLocation as { lat: number; lng: number } | null
+                  };
+                });
+                
+                // Show notification for first new job
+                if (formattedNewJobs[0]) {
+                  toast.success(
+                    `New job assigned! ${formattedNewJobs[0].vehicle_type || 'Vehicle'} - ${formattedNewJobs[0].issue_description || 'No description'}`,
+                    { duration: 5000 }
+                  );
+                }
+                
+                // Update ref
+                lastJobCountRef.current = currentCount;
+                
+                // Add new jobs to the list
+                return [...formattedNewJobs, ...prevJobs];
+              }
+              
+              // Update ref even if no new jobs (in case of reordering)
+              lastJobCountRef.current = currentCount;
+              return prevJobs;
+            });
+          } else {
+            // Update ref even if count didn't increase (could be reordering)
+            lastJobCountRef.current = currentCount;
+          }
+        }
+      } catch (pollError) {
+        console.error('Error polling for new jobs:', pollError);
+      }
+    }, 3000); // Poll every 3 seconds
 
     return () => {
+      console.log('🔌 Cleaning up realtime subscription and polling for mechanic');
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user?.id]); // Only depend on user.id
 
   const checkMechanicAuth = async () => {
     try {
@@ -357,65 +477,63 @@ const MechanicDashboard = () => {
       });
       
       setJobs(formattedJobs);
+      // Update ref with current jobs count
+      lastJobCountRef.current = formattedJobs.length;
     } catch (error) {
       console.error("Error fetching jobs:", error);
       toast.error("Failed to load jobs");
     }
   };
 
-  const updateJobStatus = async (jobId: string, status: string) => {
+  // XState integrated job status management
+  const updateJobStatus = async (jobId: string, newStatus: string) => {
     try {
       const { error } = await supabase
         .from("job_requests")
         .update({ 
-          status: status,
+          status: newStatus,
           updated_at: new Date().toISOString()
         })
         .eq("id", jobId);
 
-      if (error) {
-        console.error("Status update error details:", error);
-        throw error;
-      }
+      if (error) throw error;
 
+      // Update local state
       setJobs(jobs.map(job => 
-        job.id === jobId ? { ...job, status: status } : job
+        job.id === jobId ? { ...job, status: newStatus } : job
       ));
 
-      const statusLabels: Record<string, string> = {
-        "accepted": "Job accepted",
-        "on_the_way": "On the way to customer",
-        "reached_destination": "Reached customer location",
-        "repair_started": "Repair started",
-        "repair_completed": "Repair completed",
-        "completed": "Job completed",
-      };
-
-      toast.success(statusLabels[status] || "Job status updated successfully");
+      // Refresh jobs
+      if (user?.id) {
+        fetchJobs(user.id);
+      }
     } catch (error: any) {
       console.error("Error updating job status:", error);
-      const errorMsg = error?.message || "Failed to update job status";
-      toast.error(errorMsg);
+      toast.error(error?.message || "Failed to update job status");
     }
   };
 
   const handleAcceptJob = async (jobId: string) => {
+    if (!user?.id) return;
+    
     try {
       const { error } = await supabase
         .from("job_requests")
-        .update({ status: "accepted" })
+        .update({ 
+          status: "accepted",
+          mechanic_id: user.id,
+          updated_at: new Date().toISOString()
+        })
         .eq("id", jobId);
 
       if (error) throw error;
 
-      setJobs(jobs.map(job => 
-        job.id === jobId ? { ...job, status: "accepted" } : job
-      ));
-
+      // Refresh jobs
+      fetchJobs(user.id);
       toast.success("Job accepted successfully");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error accepting job:", error);
-      toast.error("Failed to accept job");
+      toast.error(error?.message || "Failed to accept job");
     }
   };
 
@@ -430,7 +548,8 @@ const MechanicDashboard = () => {
         .from("job_requests")
         .update({ 
           status: "pending",
-          mechanic_id: null
+          mechanic_id: null,
+          updated_at: new Date().toISOString()
         })
         .eq("id", jobId);
 
@@ -438,12 +557,44 @@ const MechanicDashboard = () => {
 
       // Remove from jobs list since it's no longer assigned to this mechanic
       setJobs(jobs.filter(job => job.id !== jobId));
+      
+      if (user?.id) {
+        fetchJobs(user.id);
+      }
 
       toast.success("Job rejected. It will be reassigned to another mechanic.");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error rejecting job:", error);
-      toast.error("Failed to reject job");
+      toast.error(error?.message || "Failed to reject job");
     }
+  };
+
+  // XState-based status transition handlers
+  const handleStatusTransition = async (jobId: string, currentStatus: string, transition: string) => {
+    // Validate transition using XState machine logic
+    const { canTransition } = await import('@/machines/jobStatusMachine');
+    
+    let targetStatus = '';
+    switch (transition) {
+      case 'ARRIVE':
+        targetStatus = currentStatus === 'accepted' ? 'on_the_way' : 'reached_destination';
+        break;
+      case 'START_REPAIR':
+        targetStatus = 'repair_started';
+        break;
+      case 'FINISH':
+        targetStatus = currentStatus === 'repair_started' ? 'repair_completed' : 'completed';
+        break;
+      default:
+        targetStatus = transition.toLowerCase();
+    }
+
+    if (!canTransition(currentStatus, targetStatus)) {
+      toast.error(`Invalid status transition from ${currentStatus} to ${targetStatus}`);
+      return;
+    }
+
+    await updateJobStatus(jobId, targetStatus);
   };
 
   const startLocationSharing = async () => {
@@ -561,8 +712,12 @@ const MechanicDashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <main className="flex-1 container mx-auto px-4 py-6">
+          <SkeletonList count={4} />
+        </main>
+        <Footer />
       </div>
     );
   }
@@ -710,7 +865,9 @@ const MechanicDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
-                {jobs.filter(j => j.status === "in_progress").length}
+                {jobs.filter(j => 
+                  ['accepted', 'on_the_way', 'reached_destination', 'repair_started', 'repair_completed'].includes(j.status)
+                ).length}
               </div>
             </CardContent>
           </Card>
@@ -770,6 +927,16 @@ const MechanicDashboard = () => {
                                 {job.status.replace("_", " ")}
                               </span>
                             </div>
+                            {job.user_id && user?.id && (
+                              <ChatButton 
+                                key={job.id}
+                                requestId={job.id} 
+                                userId={user.id}
+                                unreadCount={getUnreadCount(job.id)}
+                                onOpen={() => handleChatOpen(job.id)}
+                                senderType="mechanic"
+                              />
+                            )}
                           </div>
                           <p className="text-xs sm:text-sm text-muted-foreground break-words">
                             {job.issue_description}
@@ -805,115 +972,25 @@ const MechanicDashboard = () => {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {job.status === "pending" && job.mechanic_id === user.id ? (
-                          <div className="flex gap-2 w-full">
-                            <Button
-                              size="sm"
-                              onClick={() => handleAcceptJob(job.id)}
-                              className="flex-1"
-                            >
-                              <CheckCircle className="h-4 w-4 mr-2" />
-                              Accept
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleRejectJob(job.id)}
-                              className="flex-1"
-                            >
-                              <XCircle className="h-4 w-4 mr-2" />
-                              Reject
-                            </Button>
-                          </div>
-                        ) : job.status === "accepted" ? (
-                          // Show status options after accepting
-                          <Select
-                            value={job.status}
-                            onValueChange={(value) => updateJobStatus(job.id, value)}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="accepted">Accepted</SelectItem>
-                              <SelectItem value="on_the_way">On The Way</SelectItem>
-                              <SelectItem value="reached_destination">Reached Destination</SelectItem>
-                              <SelectItem value="repair_started">Repair Started</SelectItem>
-                              <SelectItem value="repair_completed">Repair Completed</SelectItem>
-                              <SelectItem value="completed">Completed</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : job.status === "on_the_way" ? (
-                          <Select
-                            value={job.status}
-                            onValueChange={(value) => updateJobStatus(job.id, value)}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="on_the_way">On The Way</SelectItem>
-                              <SelectItem value="reached_destination">Reached Destination</SelectItem>
-                              <SelectItem value="repair_started">Repair Started</SelectItem>
-                              <SelectItem value="repair_completed">Repair Completed</SelectItem>
-                              <SelectItem value="completed">Completed</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : job.status === "reached_destination" ? (
-                          <Select
-                            value={job.status}
-                            onValueChange={(value) => updateJobStatus(job.id, value)}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="reached_destination">Reached Destination</SelectItem>
-                              <SelectItem value="repair_started">Repair Started</SelectItem>
-                              <SelectItem value="repair_completed">Repair Completed</SelectItem>
-                              <SelectItem value="completed">Completed</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : job.status === "repair_started" ? (
-                          <Select
-                            value={job.status}
-                            onValueChange={(value) => updateJobStatus(job.id, value)}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="repair_started">Repair Started</SelectItem>
-                              <SelectItem value="repair_completed">Repair Completed</SelectItem>
-                              <SelectItem value="completed">Completed</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : job.status === "repair_completed" ? (
-                          <Select
-                            value={job.status}
-                            onValueChange={(value) => updateJobStatus(job.id, value)}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="repair_completed">Repair Completed</SelectItem>
-                              <SelectItem value="completed">Completed</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <Select
-                            value={job.status}
-                            onValueChange={(value) => updateJobStatus(job.id, value)}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={job.status}>{job.status.replace("_", " ")}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
+                        <JobStatusManager
+                          jobId={job.id}
+                          currentStatus={job.status}
+                          mechanicId={job.mechanic_id || user?.id}
+                          userId={job.user_id}
+                          onStatusChange={(newStatus) => {
+                            updateJobStatus(job.id, newStatus);
+                          }}
+                          onAccept={() => {
+                            if (user?.id) {
+                              fetchJobs(user.id);
+                            }
+                          }}
+                          onReject={() => {
+                            if (user?.id) {
+                              fetchJobs(user.id);
+                            }
+                          }}
+                        />
                       </div>
                     </div>
                   ))
@@ -953,6 +1030,18 @@ const MechanicDashboard = () => {
       </main>
 
       <Footer />
+
+      {/* Chat Notification Badge - Shows when new messages arrive */}
+      {latestNotification && (
+        <ChatNotificationBadge
+          unreadCount={totalUnreadCount}
+          lastMessage={latestNotification.message}
+          onClick={() => {
+            handleChatOpen(latestNotification.requestId);
+            setOpenChatRequestId(latestNotification.requestId);
+          }}
+        />
+      )}
     </div>
   );
 };

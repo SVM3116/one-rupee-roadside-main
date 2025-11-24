@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Clock, CheckCircle, Navigation, AlertCircle, Star, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { RatingDialog } from "./RatingDialog";
+import ChatButton from "./ChatButton";
+import { SkeletonList } from "./SkeletonCard";
 
 interface JobRequest {
   id: string;
@@ -23,9 +25,12 @@ interface RequestWithRating extends JobRequest {
 
 interface MyRequestsProps {
   userId: string;
+  getUnreadCount?: (requestId: string) => number;
+  onChatOpen?: (requestId: string) => void;
+  openChatRequestId?: string | null;
 }
 
-const MyRequests = ({ userId }: MyRequestsProps) => {
+const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: MyRequestsProps) => {
   const [requests, setRequests] = useState<RequestWithRating[]>([]);
   const [loading, setLoading] = useState(true);
   const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
@@ -337,9 +342,7 @@ const MyRequests = ({ userId }: MyRequestsProps) => {
           <CardDescription>Loading your assistance requests...</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
+          <SkeletonList count={3} />
         </CardContent>
       </Card>
     );
@@ -367,9 +370,9 @@ const MyRequests = ({ userId }: MyRequestsProps) => {
                 key={request.id}
                 className="p-3 sm:p-4 border rounded-lg space-y-2 sm:space-y-3 hover:bg-muted/50 transition-colors"
               >
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Badge variant="outline" className="capitalize">
                         {request.vehicle_type}
                       </Badge>
@@ -379,6 +382,15 @@ const MyRequests = ({ userId }: MyRequestsProps) => {
                           {getStatusLabel(request.status)}
                         </span>
                       </div>
+                      {request.mechanic_id && (
+                        <ChatButton 
+                          requestId={request.id} 
+                          userId={userId}
+                          unreadCount={getUnreadCount ? getUnreadCount(request.id) : 0}
+                          onOpen={onChatOpen ? () => onChatOpen(request.id) : undefined}
+                          senderType="user"
+                        />
+                      )}
                     </div>
                     <p className="text-sm">{request.issue_description}</p>
                     <p className="text-xs text-muted-foreground">

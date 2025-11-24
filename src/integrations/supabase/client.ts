@@ -13,12 +13,14 @@ if (import.meta.env.DEV && (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY)) {
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Use sessionStorage instead of localStorage so sessions are cleared when tab closes
+// This ensures users are automatically signed out when they close the browser tab
 export const supabase = createClient<Database>(
   SUPABASE_URL || '',
   SUPABASE_PUBLISHABLE_KEY || '',
   {
     auth: {
-      storage: localStorage,
+      storage: sessionStorage,
       persistSession: true,
       autoRefreshToken: true,
     }

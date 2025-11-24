@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,11 +14,24 @@ import LoadingScreen from "@/components/LoadingScreen";
 
 const Auth = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const roleParam = searchParams.get('role'); // Get role from URL query parameter
   const [isLoading, setIsLoading] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [showLoadingScreen, setShowLoadingScreen] = useState(false);
+  const [defaultTab, setDefaultTab] = useState<'signin' | 'signup'>('signin');
+
+  // Set default tab based on URL query parameter
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'signup') {
+      setDefaultTab('signup');
+    } else {
+      setDefaultTab('signin');
+    }
+  }, [searchParams]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -342,13 +355,26 @@ const Auth = () => {
             <CardDescription>Sign in or create an account to continue</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="signin" className="w-full">
+            <Tabs value={defaultTab} onValueChange={(value) => setDefaultTab(value as 'signin' | 'signup')} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="signin">Sign In</TabsTrigger>
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
               </TabsList>
 
               <TabsContent value="signin">
+                {roleParam === 'mechanic' ? (
+                  <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                    <p className="text-sm text-primary font-medium">
+                      🔧 Welcome Mechanics! Sign in to access your dashboard and start accepting jobs.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                    <p className="text-sm text-primary font-medium">
+                      🚗 Welcome Travellers! Sign in to access your dashboard and get roadside assistance when you need it.
+                    </p>
+                  </div>
+                )}
                 <form onSubmit={handleSignIn} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="signin-email">Email</Label>
@@ -374,8 +400,13 @@ const Auth = () => {
                     className="w-full bg-gradient-to-r from-primary to-accent"
                     disabled={isLoading}
                   >
-                    {isLoading ? "Signing in..." : "Sign In"}
+                    {isLoading ? "Signing in..." : roleParam === 'mechanic' ? "Sign In as Mechanic" : "Sign In"}
                   </Button>
+                  {roleParam === 'mechanic' && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      Don't have a mechanic account? <Link to="/auth?role=mechanic&tab=signup" className="text-primary hover:underline">Sign Up as Mechanic</Link>
+                    </p>
+                  )}
                 </form>
               </TabsContent>
 
@@ -470,6 +501,13 @@ const Auth = () => {
                       </div>
                     </div>
                   </div>
+                  {roleParam === 'mechanic' && (
+                    <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                      <p className="text-sm text-primary font-medium">
+                        🔧 Signing up as a Mechanic? Select "Mechanic" below to create your professional account.
+                      </p>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="userType">I am a *</Label>
                     <select
@@ -477,6 +515,7 @@ const Auth = () => {
                       name="userType"
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       required
+                      defaultValue={roleParam === 'mechanic' ? 'mechanic' : 'traveler'}
                     >
                       <option value="traveler">Traveler</option>
                       <option value="mechanic">Mechanic</option>

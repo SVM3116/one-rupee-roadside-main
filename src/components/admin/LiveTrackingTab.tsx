@@ -5,7 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, MapPin, User, Wrench, Navigation, Clock, CheckCircle, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { GoogleMap, LoadScript, Marker, InfoWindow } from "@react-google-maps/api";
+import { GoogleMap, LoadScript, Marker, InfoWindow, HeatmapLayer } from "@react-google-maps/api";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface MechanicData {
   id: string;
@@ -47,6 +49,9 @@ const LiveTrackingTab = () => {
   const [selectedMechanic, setSelectedMechanic] = useState<string | null>(null);
   const [mapCenter, setMapCenter] = useState({ lat: 15.7765, lng: 74.4664 });
   const [mapZoom, setMapZoom] = useState(12);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [onlineOnly, setOnlineOnly] = useState(false);
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
   const updateIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
@@ -480,14 +485,58 @@ const LiveTrackingTab = () => {
         {/* Map */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Live Location Map</CardTitle>
-            <CardDescription>
-              Real-time GPS tracking - Updates every second
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Live Location Map</CardTitle>
+                <CardDescription>
+                  Real-time GPS tracking - Updates every second
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-4">
+                {/* Heatmap Controls */}
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="heatmap-toggle"
+                    checked={showHeatmap}
+                    onCheckedChange={setShowHeatmap}
+                  />
+                  <Label htmlFor="heatmap-toggle" className="text-sm cursor-pointer">
+                    Show Heatmap
+                  </Label>
+                </div>
+                {showHeatmap && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="online-only"
+                        checked={onlineOnly}
+                        onCheckedChange={setOnlineOnly}
+                      />
+                      <Label htmlFor="online-only" className="text-sm cursor-pointer">
+                        Online Only
+                      </Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="verified-only"
+                        checked={verifiedOnly}
+                        onCheckedChange={setVerifiedOnly}
+                      />
+                      <Label htmlFor="verified-only" className="text-sm cursor-pointer">
+                        Verified Only
+                      </Label>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {apiKey ? (
-              <LoadScript googleMapsApiKey={apiKey}>
+              <LoadScript 
+                googleMapsApiKey={apiKey}
+                libraries={["visualization"]}
+              >
                 <GoogleMap
                   mapContainerStyle={{ width: "100%", height: "600px" }}
                   center={mapCenter}
@@ -498,8 +547,55 @@ const LiveTrackingTab = () => {
                     fullscreenControl: true,
                   }}
                 >
-                  {/* Mechanic Markers - Only show when online and location is available */}
-                  {mechanics
+                  {/* Heatmap Layer */}
+                  {showHeatmap && (() => {
+                    // Filter mechanics based on heatmap options
+                    let filteredMechanics = mechanics.filter(m => m.latitude && m.longitude);
+                    
+                    if (onlineOnly) {
+                      filteredMechanics = filteredMechanics.filter(m => m.availability_status === "online");
+                    }
+                    
+                    if (verifiedOnly) {
+                      filteredMechanics = filteredMechanics.filter(m => m.verification_status === "approved");
+                    }
+                    
+                    // Generate heatmap data
+                    const heatmapData = filteredMechanics.map(m => ({
+                      location: new window.google.maps.LatLng(m.latitude!, m.longitude!),
+                      weight: 1
+                    }));
+                    
+                    return heatmapData.length > 0 ? (
+                      <HeatmapLayer
+                        data={heatmapData}
+                        options={{
+                          radius: 50,
+                          opacity: 0.7,
+                          maxIntensity: 10,
+                          gradient: [
+                            "rgba(0, 255, 255, 0)",
+                            "rgba(0, 255, 255, 1)",
+                            "rgba(0, 191, 255, 1)",
+                            "rgba(0, 127, 255, 1)",
+                            "rgba(0, 63, 255, 1)",
+                            "rgba(0, 0, 255, 1)",
+                            "rgba(0, 0, 223, 1)",
+                            "rgba(0, 0, 191, 1)",
+                            "rgba(0, 0, 159, 1)",
+                            "rgba(0, 0, 127, 1)",
+                            "rgba(63, 0, 91, 1)",
+                            "rgba(127, 0, 63, 1)",
+                            "rgba(191, 0, 31, 1)",
+                            "rgba(255, 0, 0, 1)"
+                          ]
+                        }}
+                      />
+                    ) : null;
+                  })()}
+                  
+                  {/* Mechanic Markers - Only show when NOT in heatmap mode, or when heatmap is off */}
+                  {!showHeatmap && mechanics
                     .filter(m => m.availability_status === "online" && m.latitude && m.longitude)
                     .map((mechanic) => (
                     <Marker

@@ -34,14 +34,22 @@ export default defineConfig(({ mode }) => ({
     // Proxy /api calls to backend to avoid CORS and connection issues in dev
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: process.env.VITE_API_BASE || 'http://localhost:5000',
         changeOrigin: true,
-        secure: false,
+        secure: false, // Allow self-signed certificates
+        ws: true, // Enable WebSocket proxying if needed
         configure: (proxy, options) => {
           // optional: log proxy errors
           proxy.on('error', (err, req, res) => {
             // eslint-disable-next-line no-console
             console.error('[vite proxy] error', err && err.message);
+          });
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            // Log proxy requests in dev
+            if (mode === 'development') {
+              // eslint-disable-next-line no-console
+              console.log('[vite proxy]', req.method, req.url, '->', proxyReq.path);
+            }
           });
         }
       }

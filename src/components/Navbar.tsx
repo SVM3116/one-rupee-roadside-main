@@ -4,15 +4,32 @@ import { Menu, Shield } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import Logo from "./Logo";
+import NotificationBell from "./NotificationBell";
 
 const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMechanic, setIsMechanic] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     checkUserRole();
+    checkSession();
   }, []);
+
+  const checkSession = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      setUserId(session.user.id);
+    }
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user.id || null);
+    });
+
+    return () => subscription.unsubscribe();
+  };
 
   const checkUserRole = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -74,15 +91,31 @@ const Navbar = () => {
           </div>
 
           {/* Auth Buttons */}
-          <div className="hidden md:flex items-center space-x-4">
-            <Link to="/auth">
-              <Button variant="ghost">Login</Button>
-            </Link>
-            <Link to="/auth">
-              <Button className="bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-opacity">
-                Sign Up
-              </Button>
-            </Link>
+          <div className="hidden md:flex items-center space-x-3">
+            {userId && <NotificationBell userId={userId} />}
+            {!userId ? (
+              <>
+                <Link to="/auth">
+                  <Button variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground font-medium">
+                    Traveller Login
+                  </Button>
+                </Link>
+                <Link to="/auth?role=mechanic">
+                  <Button variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground font-medium">
+                    🔧 Mechanic Login
+                  </Button>
+                </Link>
+                <Link to="/auth">
+                  <Button className="bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-opacity">
+                    Sign Up
+                  </Button>
+                </Link>
+              </>
+            ) : (
+              <Link to="/profile">
+                <Button variant="ghost">Profile</Button>
+              </Link>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -137,7 +170,14 @@ const Navbar = () => {
             )}
             <div className="flex flex-col space-y-2 pt-4">
               <Link to="/auth">
-                <Button variant="outline" className="w-full">Login</Button>
+                <Button variant="outline" className="w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground font-medium">
+                  Traveller Login
+                </Button>
+              </Link>
+              <Link to="/auth?role=mechanic">
+                <Button variant="outline" className="w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground font-medium">
+                  🔧 Mechanic Login
+                </Button>
               </Link>
               <Link to="/auth">
                 <Button className="w-full bg-gradient-to-r from-primary to-accent">

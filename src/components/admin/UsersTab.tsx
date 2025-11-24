@@ -67,11 +67,27 @@ const UsersTab = () => {
       }
 
       // Fetch ALL users (excluding mechanics and admins)
-      // First get user IDs from user_roles
-      const { data: roleData, error: roleError } = await supabase
+      // First get user IDs from user_roles - try multiple approaches
+      let roleData: any = null;
+      let roleError: any = null;
+      
+      // Try fetching users with user role
+      const { data: userRoleData, error: userRoleError } = await supabase
         .from("user_roles")
         .select("user_id")
-        .or("role.eq.user,role.eq.traveler");
+        .eq("role", "user");
+      
+      // Try fetching travelers if user role works
+      if (!userRoleError) {
+        const { data: travelerRoleData } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .eq("role", "traveler");
+        
+        roleData = [...(userRoleData || []), ...(travelerRoleData || [])];
+      } else {
+        roleError = userRoleError;
+      }
 
       if (roleError) {
         console.error("Error fetching user roles:", roleError);

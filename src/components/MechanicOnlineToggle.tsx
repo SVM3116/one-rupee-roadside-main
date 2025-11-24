@@ -176,7 +176,14 @@ const MechanicOnlineToggle = ({ mechanicId, onStatusChange, onToggleOnline }: Pr
               // ignore
             }
 
-            const fallback = await fetch(`${base}/api/mechanic/toggle-online`, {
+            // Ensure we use the same protocol as the current page to avoid mixed content
+            const apiUrl = base 
+              ? (base.startsWith('http://') && window.location.protocol === 'https:' 
+                  ? `${window.location.origin}/api/mechanic/toggle-online` // Use Vite proxy if mixed content
+                  : `${base}/api/mechanic/toggle-online`)
+              : '/api/mechanic/toggle-online'; // Use relative URL (Vite proxy)
+            
+            const fallback = await fetch(apiUrl, {
               method: 'POST',
               headers,
               body: JSON.stringify({ isOnline: next }),

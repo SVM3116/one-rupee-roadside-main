@@ -10,6 +10,7 @@ import UsersTab from "@/components/admin/UsersTab";
 import MechanicsTab from "@/components/admin/MechanicsTab";
 import JobRequestsTab from "@/components/admin/JobRequestsTab";
 import LiveTrackingTab from "@/components/admin/LiveTrackingTab";
+import AnalyticsTab from "@/components/admin/AnalyticsTab";
 import { Loader2 } from "lucide-react";
 
 const Admin = () => {
@@ -82,13 +83,18 @@ const Admin = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 sm:p-6">
-            <Tabs defaultValue="live" className="w-full">
-              <TabsList className="grid w-full grid-cols-4 h-auto">
+            <Tabs defaultValue="analytics" className="w-full">
+              <TabsList className="grid w-full grid-cols-5 h-auto">
+                <TabsTrigger value="analytics" className="text-xs sm:text-sm py-2 sm:py-3">Analytics</TabsTrigger>
                 <TabsTrigger value="live" className="text-xs sm:text-sm py-2 sm:py-3">Live Tracking</TabsTrigger>
                 <TabsTrigger value="users" className="text-xs sm:text-sm py-2 sm:py-3">Users</TabsTrigger>
                 <TabsTrigger value="mechanics" className="text-xs sm:text-sm py-2 sm:py-3">Mechanics</TabsTrigger>
                 <TabsTrigger value="jobs" className="text-xs sm:text-sm py-2 sm:py-3">Job Requests</TabsTrigger>
               </TabsList>
+              
+              <TabsContent value="analytics">
+                <AnalyticsTab />
+              </TabsContent>
               
               <TabsContent value="live">
                 <LiveTrackingTab />
