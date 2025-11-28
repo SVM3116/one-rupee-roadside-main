@@ -17,14 +17,25 @@ exports.toggleOnline = async (req, res) => {
 
     const availabilityStatus = isOnline ? 'online' : 'offline';
 
-    // Update profile (role check is done by middleware)
+    if (!supabase) {
+      throw new Error('Supabase client not configured on the server');
+    }
+
+    const now = new Date().toISOString();
+
+    // Use upsert so mechanics without a profile row don't fail with 500s
     const { data: updated, error } = await supabase
       .from('profiles')
-      .update({
-        availability_status: availabilityStatus,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', uid)
+      .upsert(
+        {
+          id: uid,
+          availability_status: availabilityStatus,
+          updated_at: now,
+        },
+        {
+          onConflict: 'id',
+        }
+      )
       .select()
       .single();
 
