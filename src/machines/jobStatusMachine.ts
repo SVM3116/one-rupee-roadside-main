@@ -17,7 +17,40 @@ export type JobStatusEvent =
   | { type: 'CANCEL' }
   | { type: 'RESET'; status: string };
 
-export const jobStatusMachine = createMachine<JobStatusContext, JobStatusEvent>(
+const VALID_STATUSES = [
+  'pending',
+  'accepted',
+  'on_the_way',
+  'reached_destination',
+  'repair_started',
+  'repair_completed',
+  'completed',
+  'rejected',
+  'cancelled',
+] as const;
+
+type JobStatusValue = (typeof VALID_STATUSES)[number];
+
+const matchesStatus = (status: JobStatusValue) => {
+  return (_: JobStatusContext, event: JobStatusEvent) => {
+    if (event.type !== 'RESET') {
+      return false;
+    }
+    const safeStatus = getInitialState(event.status);
+    return safeStatus === status;
+  };
+};
+
+const createResetTransitions = () =>
+  VALID_STATUSES.map((status) => ({
+    cond: matchesStatus(status),
+    target: status,
+    actions: assign({
+      currentStatus: () => status,
+    }),
+  }));
+
+export const jobStatusMachine = createMachine(
   {
     id: 'jobStatus',
     initial: 'pending',
@@ -35,7 +68,12 @@ export const jobStatusMachine = createMachine<JobStatusContext, JobStatusEvent>(
             target: 'accepted',
             actions: assign({
               currentStatus: 'accepted',
-              mechanicId: (_, event) => event.mechanicId,
+              mechanicId: (_, event) => {
+                if (event && typeof event === 'object' && 'mechanicId' in event) {
+                  return (event as { mechanicId: string }).mechanicId;
+                }
+                return null;
+              },
             }),
           },
           REJECT: {
@@ -149,17 +187,26 @@ export const jobStatusMachine = createMachine<JobStatusContext, JobStatusEvent>(
       },
     },
     on: {
-      RESET: {
-        actions: assign({
-          currentStatus: (_, event) => {
-            if (!event || typeof event !== 'object' || !('status' in event)) {
-              console.warn('RESET event missing status property', event);
-              return 'pending'; // Default to pending if event is invalid
-            }
-            return (event as any).status;
-          },
-        }),
-      },
+      RESET: [
+        ...createResetTransitions(),
+        {
+          target: 'pending',
+          actions: assign({
+            currentStatus: (_, event) => {
+              if (!event || typeof event !== 'object' || !('type' in event)) {
+                console.warn('RESET handler received invalid event', event);
+                return 'pending';
+              }
+              if ((event as JobStatusEvent).type !== 'RESET') {
+                console.warn('RESET handler received unexpected event', event);
+              } else {
+                console.warn('RESET event missing status property', event);
+              }
+              return 'pending';
+            },
+          }),
+        },
+      ],
     },
   },
   {
@@ -170,20 +217,8 @@ export const jobStatusMachine = createMachine<JobStatusContext, JobStatusEvent>(
 );
 
 // Helper function to get the initial state based on current status
-export const getInitialState = (status: string): string => {
-  const validStates = [
-    'pending',
-    'accepted',
-    'on_the_way',
-    'reached_destination',
-    'repair_started',
-    'repair_completed',
-    'completed',
-    'rejected',
-    'cancelled',
-  ];
-
-  return validStates.includes(status) ? status : 'pending';
+export const getInitialState = (status: string): JobStatusValue => {
+  return VALID_STATUSES.includes(status as JobStatusValue) ? (status as JobStatusValue) : 'pending';
 };
 
 // Helper function to get available transitions for a status

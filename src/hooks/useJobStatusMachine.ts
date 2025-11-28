@@ -31,9 +31,13 @@ export const useJobStatusMachine = ({
 
   // Reset machine when initial status changes - but avoid infinite loops
   useEffect(() => {
+    if (!initialStatus) {
+      return;
+    }
+
     const currentState = getInitialState(initialStatus);
     // Only reset if status actually changed and we have a valid state
-    if (currentState && currentState !== state.value) {
+    if (currentState && currentState !== state.context.currentStatus) {
       try {
         // Ensure we send a valid RESET event with status property
         const resetEvent: JobStatusEvent = { type: 'RESET', status: currentState };
@@ -43,8 +47,7 @@ export const useJobStatusMachine = ({
         console.warn('Machine reset warning:', error);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialStatus]); // Reset when initial status changes
+  }, [initialStatus, state.context.currentStatus, send]);
 
   // Listen for state changes
   useEffect(() => {
