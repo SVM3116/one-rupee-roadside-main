@@ -44,7 +44,7 @@ const matchesStatus = (status: JobStatusValue) => {
 const createResetTransitions = () =>
   VALID_STATUSES.map((status) => ({
     cond: matchesStatus(status),
-    target: status,
+    target: `.${status}`,
     actions: assign({
       currentStatus: () => status,
     }),
@@ -190,7 +190,7 @@ export const jobStatusMachine = createMachine(
       RESET: [
         ...createResetTransitions(),
         {
-          target: 'pending',
+          target: '.pending',
           actions: assign({
             currentStatus: (_, event) => {
               if (!event || typeof event !== 'object' || !('type' in event)) {
