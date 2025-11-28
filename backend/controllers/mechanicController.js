@@ -10,6 +10,13 @@ exports.toggleOnline = async (req, res) => {
     const uid = req.user?.id;
     if (!uid) return res.status(401).json({ error: 'Unauthorized' });
 
+    const userEmail = req.user?.email;
+    const userFullName =
+      req.user?.user_metadata?.full_name ||
+      req.user?.user_metadata?.fullName ||
+      req.user?.user_metadata?.name ||
+      null;
+
     const { isOnline } = req.body;
     if (typeof isOnline !== 'boolean') {
       return res.status(400).json({ error: 'isOnline (boolean) is required' });
@@ -23,24 +30,64 @@ exports.toggleOnline = async (req, res) => {
 
     const now = new Date().toISOString();
 
-    // Use upsert so mechanics without a profile row don't fail with 500s
-    const { data: updated, error } = await supabase
+    // Ensure the mechanic has a profile row before updating availability
+    const { data: existingProfile, error: profileLookupError } = await supabase
       .from('profiles')
-      .upsert(
-        {
-          id: uid,
+      .select('id')
+      .eq('id', uid)
+      .maybeSingle();
+
+    if (profileLookupError) {
+      throw profileLookupError;
+    }
+
+    let updated;
+
+    if (!existingProfile) {
+      if (!userEmail) {
+        return res.status(400).json({
+          error: 'Mechanic profile missing and user email unavailable',
+          details: 'Complete profile setup before toggling availability.',
+        });
+      }
+
+      const insertPayload = {
+        id: uid,
+        email: userEmail,
+        full_name: userFullName,
+        role: 'mechanic',
+        status: 'active',
+        availability_status: availabilityStatus,
+        updated_at: now,
+      };
+
+      const { data: inserted, error: insertError } = await supabase
+        .from('profiles')
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      updated = inserted;
+    } else {
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('profiles')
+        .update({
           availability_status: availabilityStatus,
           updated_at: now,
-        },
-        {
-          onConflict: 'id',
-        }
-      )
-      .select()
-      .single();
+        })
+        .eq('id', uid)
+        .select()
+        .single();
 
-    if (error) {
-      throw error;
+      if (updateError) {
+        throw updateError;
+      }
+
+      updated = updatedProfile;
     }
 
     return res.json({
@@ -54,7 +101,12 @@ exports.toggleOnline = async (req, res) => {
     });
   } catch (err) {
     console.error('toggleOnline error', err);
-    return res.status(500).json({ error: 'Failed to update mechanic status', details: err.message });
+    return res.status(500).json({
+      error: 'Failed to update mechanic status',
+      details: err?.message || String(err),
+      code: err?.code,
+      hint: err?.hint,
+    });
   }
 };
 
