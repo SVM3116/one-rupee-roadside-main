@@ -32,18 +32,18 @@ const VALID_STATUSES = [
 type JobStatusValue = (typeof VALID_STATUSES)[number];
 
 const matchesStatus = (status: JobStatusValue) => {
-  return (_: JobStatusContext, event: JobStatusEvent) => {
+  return ({ event }: any) => {
     if (event.type !== 'RESET') {
       return false;
     }
-    const safeStatus = getInitialState(event.status);
+    const safeStatus = getInitialState((event as any).status);
     return safeStatus === status;
   };
 };
 
 const createResetTransitions = () =>
   VALID_STATUSES.map((status) => ({
-    cond: matchesStatus(status),
+    guard: matchesStatus(status),
     target: `.${status}`,
     actions: assign({
       currentStatus: () => status,

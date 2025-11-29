@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Clock, CheckCircle, Navigation, AlertCircle, Star, MapPin } from "lucide-react";
+import { Clock, CheckCircle, Navigation, AlertCircle, Star, MapPin, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { RatingDialog } from "./RatingDialog";
 import ChatButton from "./ChatButton";
@@ -21,6 +21,9 @@ interface JobRequest {
 
 interface RequestWithRating extends JobRequest {
   hasRating: boolean;
+  mechanic_name?: string | null;
+  mechanic_phone?: string | null;
+  mechanic_photo?: string | null;
 }
 
 interface MyRequestsProps {
@@ -138,6 +141,27 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
 
       if (jobError) throw jobError;
 
+      // Get unique mechanic IDs
+      const mechanicIds = [...new Set((jobData || []).map(job => job.mechanic_id).filter(Boolean))];
+
+      // Fetch mechanic profiles separately
+      let mechanicProfiles: any[] = [];
+      if (mechanicIds.length > 0) {
+        const { data: profiles, error: profileError } = await supabase
+          .from("profiles")
+          .select("id, full_name, phone, profile_photo")
+          .in("id", mechanicIds);
+
+        if (profileError) {
+          console.error("Error fetching mechanic profiles:", profileError);
+        } else {
+          mechanicProfiles = profiles || [];
+        }
+      }
+
+      // Create a map of mechanic profiles
+      const mechanicMap = new window.Map(mechanicProfiles.map(p => [p.id, p]));
+
       // Check which completed jobs have ratings
       const completedJobs = jobData?.filter(job => job.status === 'completed') || [];
       const { data: testimonials, error: testimonialsError } = await supabase
@@ -149,11 +173,17 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
       if (testimonialsError) console.error("Error fetching testimonials:", testimonialsError);
 
       const ratedMechanics = new Set(testimonials?.map(t => t.mechanic_id) || []);
-      
-      const requestsWithRatings = (jobData || []).map(job => ({
-        ...job,
-        hasRating: job.status === 'completed' && job.mechanic_id ? ratedMechanics.has(job.mechanic_id) : false,
-      }));
+
+      const requestsWithRatings = (jobData || []).map(job => {
+        const mechanicProfile = mechanicMap.get(job.mechanic_id);
+        return {
+          ...job,
+          mechanic_name: mechanicProfile?.full_name || null,
+          mechanic_phone: mechanicProfile?.phone || null,
+          mechanic_photo: mechanicProfile?.profile_photo || null,
+          hasRating: job.status === 'completed' && job.mechanic_id ? ratedMechanics.has(job.mechanic_id) : false,
+        };
+      });
 
       setRequests(requestsWithRatings);
     } catch (error) {
@@ -166,7 +196,7 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
 
   const setupRealtimeSubscription = () => {
     console.log('🔔 Setting up real-time subscription for user:', userId);
-    
+
     const channel = supabase
       .channel(`my-job-requests-${userId}`)
       .on(
@@ -183,7 +213,7 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
             new: payload.new,
             old: payload.old,
           });
-          
+
           if (payload.eventType === 'INSERT') {
             const newRequest = payload.new as JobRequest;
             console.log('➕ New request inserted:', newRequest.id);
@@ -191,7 +221,7 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
           } else if (payload.eventType === 'UPDATE') {
             const updatedRequest = payload.new as JobRequest;
             const oldRequest = payload.old as any;
-            
+
             console.log('🔄 Request updated:', {
               id: updatedRequest.id,
               oldStatus: oldRequest?.status,
@@ -199,25 +229,25 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
               oldMechanicId: oldRequest?.mechanic_id,
               newMechanicId: updatedRequest.mechanic_id,
             });
-            
+
             // Update the request in the list
             setRequests(prev => {
-              const updated = prev.map(req => 
-                req.id === updatedRequest.id 
-                  ? { ...updatedRequest, hasRating: req.hasRating } 
+              const updated = prev.map(req =>
+                req.id === updatedRequest.id
+                  ? { ...updatedRequest, hasRating: req.hasRating }
                   : req
               );
               console.log('✅ Updated requests list:', updated);
               return updated;
             });
-            
+
             // Notify user of status changes
             const oldStatus = oldRequest?.status;
             const newStatus = updatedRequest.status;
-            
+
             if (oldStatus !== newStatus) {
               console.log(`📢 Status changed: ${oldStatus} → ${newStatus}`);
-              
+
               const statusMessages: Record<string, string> = {
                 'accepted': 'Mechanic has accepted your request!',
                 'on_the_way': 'Mechanic is on the way to your location!',
@@ -228,7 +258,7 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
                 'rejected': 'Mechanic rejected your request. Finding another mechanic...',
                 'cancelled': 'Your request has been cancelled.',
               };
-              
+
               const message = statusMessages[newStatus];
               if (message) {
                 console.log('🔔 Showing toast:', message);
@@ -236,7 +266,7 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
               } else {
                 console.log('⚠️ No message for status:', newStatus);
               }
-              
+
               // Refresh if completed to show rating button
               if (newStatus === 'completed') {
                 console.log('✅ Job completed, refreshing requests...');
@@ -245,7 +275,7 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
             } else {
               console.log('ℹ️ Status unchanged:', newStatus);
             }
-            
+
             // Also notify when mechanic is first assigned
             if (!oldRequest?.mechanic_id && updatedRequest.mechanic_id) {
               console.log('👤 Mechanic assigned:', updatedRequest.mechanic_id);
@@ -383,8 +413,8 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
                         </span>
                       </div>
                       {request.mechanic_id && (
-                        <ChatButton 
-                          requestId={request.id} 
+                        <ChatButton
+                          requestId={request.id}
                           userId={userId}
                           unreadCount={getUnreadCount ? getUnreadCount(request.id) : 0}
                           onOpen={onChatOpen ? () => onChatOpen(request.id) : undefined}
@@ -396,10 +426,41 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
                     <p className="text-xs text-muted-foreground">
                       Submitted: {new Date(request.created_at).toLocaleString()}
                     </p>
-                    {request.mechanic_id && (
-                      <p className="text-xs text-green-600 dark:text-green-400">
-                        ✓ Mechanic assigned
-                      </p>
+
+                    {/* Mechanic Details - Show after accepting */}
+                    {request.mechanic_id && request.status !== 'pending' && (request.mechanic_name || request.mechanic_phone) && (
+                      <div className="mt-3 p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                        <p className="text-xs font-semibold text-green-900 dark:text-green-100 mb-2">Assigned Mechanic</p>
+                        <div className="flex items-center gap-3">
+                          {request.mechanic_photo ? (
+                            <img
+                              src={request.mechanic_photo}
+                              alt={request.mechanic_name || 'Mechanic'}
+                              className="h-10 w-10 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded-full bg-green-200 dark:bg-green-800 flex items-center justify-center">
+                              <span className="text-sm font-semibold text-green-900 dark:text-green-100">
+                                {request.mechanic_name?.charAt(0).toUpperCase() || 'M'}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex-1">
+                            <p className="font-medium text-sm text-green-900 dark:text-green-100">
+                              {request.mechanic_name || 'Mechanic'}
+                            </p>
+                            {request.mechanic_phone && (
+                              <a
+                                href={`tel:${request.mechanic_phone}`}
+                                className="text-xs text-green-600 dark:text-green-400 hover:underline flex items-center gap-1"
+                              >
+                                <Phone className="h-3 w-3" />
+                                {request.mechanic_phone}
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     )}
                     {request.status === 'pending' && request.mechanic_id && request.updated_at && (
                       <div className="flex items-center gap-2 mt-2 text-sm">

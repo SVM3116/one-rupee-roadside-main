@@ -45,15 +45,15 @@ const MechanicDashboard = () => {
   const [profileName, setProfileName] = useState<string>("");
   const lastJobCountRef = useRef<number>(0);
   const [userRole, setUserRole] = useState<'mechanic' | 'user' | null>('mechanic');
-  
+
   // Chat notifications
-  const { 
-    getUnreadCount, 
-    markAsRead, 
-    setOpenChatRequestId, 
-    latestNotification, 
+  const {
+    getUnreadCount,
+    markAsRead,
+    setOpenChatRequestId,
+    latestNotification,
     clearLatestNotification,
-    totalUnreadCount 
+    totalUnreadCount
   } = useChatNotifications(user?.id || null, userRole);
 
   // Stable callback for marking chat as read
@@ -77,14 +77,14 @@ const MechanicDashboard = () => {
       try {
         const { data: { session: authSession } } = await supabase.auth.getSession();
         if (!authSession) return;
-        
+
         const token = authSession.access_token;
         const headers: any = {};
         if (token) headers.Authorization = `Bearer ${token}`;
-        
+
         const statusRes = await api.get(`/api/mechanic/online-status/${user.id}`, { headers });
         const isOnline = Boolean(statusRes.data?.status?.isOnline);
-        
+
         if (isOnline) {
           console.log("🟢 [MechanicDashboard] Mechanic is online on page load - auto-starting location sharing");
           await startLocationSharing();
@@ -128,12 +128,12 @@ const MechanicDashboard = () => {
           console.log('📨 Job UPDATE event received:', payload);
           const updatedJob = payload.new as Job;
           const oldJob = payload.old as any;
-          
+
           // Check if this job is now assigned to this mechanic
           const isAssignedToMe = updatedJob.mechanic_id === user.id;
           const wasAssignedToMe = oldJob?.mechanic_id === user.id;
           const wasJustAssigned = !wasAssignedToMe && isAssignedToMe;
-          
+
           console.log('🔍 Assignment check:', {
             jobId: updatedJob.id,
             isAssignedToMe,
@@ -142,11 +142,11 @@ const MechanicDashboard = () => {
             newMechanicId: updatedJob.mechanic_id,
             oldMechanicId: oldJob?.mechanic_id
           });
-          
+
           // If job was just assigned to this mechanic, add it to the list
           if (wasJustAssigned) {
             console.log('🆕 NEW JOB ASSIGNED TO MECHANIC:', updatedJob.id);
-            
+
             // Parse user_location if it's a string
             let userLocation = updatedJob.user_location;
             if (typeof userLocation === 'string') {
@@ -157,7 +157,7 @@ const MechanicDashboard = () => {
                 userLocation = null;
               }
             }
-            
+
             // Show notification
             toast.success(
               `New job assigned! ${updatedJob.vehicle_type || 'Vehicle'} - ${updatedJob.issue_description || 'No description'}`,
@@ -165,7 +165,7 @@ const MechanicDashboard = () => {
                 duration: 5000,
               }
             );
-            
+
             // Add to jobs list (check if already exists to avoid duplicates)
             setJobs(prevJobs => {
               const exists = prevJobs.some(job => job.id === updatedJob.id);
@@ -175,9 +175,9 @@ const MechanicDashboard = () => {
                 return prevJobs.map(job =>
                   job.id === updatedJob.id
                     ? {
-                        ...updatedJob,
-                        user_location: userLocation as { lat: number; lng: number } | null
-                      }
+                      ...updatedJob,
+                      user_location: userLocation as { lat: number; lng: number } | null
+                    }
                     : job
                 );
               } else {
@@ -195,7 +195,7 @@ const MechanicDashboard = () => {
                 return newJobsList;
               }
             });
-            
+
             // Refresh jobs list to ensure we have the latest data
             if (user?.id) {
               setTimeout(() => {
@@ -205,7 +205,7 @@ const MechanicDashboard = () => {
           } else if (isAssignedToMe) {
             // Job is assigned to this mechanic - update it in the list
             console.log('🔄 Updating existing assigned job:', updatedJob.id);
-            
+
             // Parse user_location if needed
             let userLocation = updatedJob.user_location;
             if (typeof userLocation === 'string') {
@@ -215,7 +215,7 @@ const MechanicDashboard = () => {
                 userLocation = null;
               }
             }
-            
+
             // Update job in list
             setJobs(prevJobs => {
               const exists = prevJobs.some(job => job.id === updatedJob.id);
@@ -237,9 +237,9 @@ const MechanicDashboard = () => {
               return prevJobs.map(job =>
                 job.id === updatedJob.id
                   ? {
-                      ...updatedJob,
-                      user_location: userLocation as { lat: number; lng: number } | null
-                    }
+                    ...updatedJob,
+                    user_location: userLocation as { lat: number; lng: number } | null
+                  }
                   : job
               );
             });
@@ -273,21 +273,21 @@ const MechanicDashboard = () => {
         if (!error && currentJobs) {
           const currentCount = currentJobs.length;
           const lastCount = lastJobCountRef.current;
-          
+
           // If we have more jobs than before, a new one was assigned
           if (currentCount > lastCount) {
             console.log('🔄 Polling detected new job assignment!', {
               previous: lastCount,
               current: currentCount
             });
-            
+
             // Use functional update to get latest jobs state
             setJobs(prevJobs => {
               const existingIds = new Set(prevJobs.map(j => j.id));
-              
+
               // Find the new job(s) that aren't in our list
               const newJobs = currentJobs.filter(newJob => !existingIds.has(newJob.id));
-              
+
               if (newJobs.length > 0) {
                 const formattedNewJobs = newJobs.map(job => {
                   let userLocation = job.user_location;
@@ -303,7 +303,7 @@ const MechanicDashboard = () => {
                     user_location: userLocation as { lat: number; lng: number } | null
                   };
                 });
-                
+
                 // Show notification for first new job
                 if (formattedNewJobs[0]) {
                   toast.success(
@@ -311,14 +311,14 @@ const MechanicDashboard = () => {
                     { duration: 5000 }
                   );
                 }
-                
+
                 // Update ref
                 lastJobCountRef.current = currentCount;
-                
+
                 // Add new jobs to the list
                 return [...formattedNewJobs, ...prevJobs];
               }
-              
+
               // Update ref even if no new jobs (in case of reordering)
               lastJobCountRef.current = currentCount;
               return prevJobs;
@@ -343,7 +343,7 @@ const MechanicDashboard = () => {
   const checkMechanicAuth = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session) {
         navigate("/auth");
         return;
@@ -380,7 +380,7 @@ const MechanicDashboard = () => {
       }
 
       setUser(session.user);
-      
+
       // Fetch profile to get photo and name
       const { data: profileData } = await supabase
         .from("profiles")
@@ -394,7 +394,7 @@ const MechanicDashboard = () => {
       } else {
         setProfileName(session.user.user_metadata?.full_name || session.user.email || "Mechanic");
       }
-      
+
       fetchJobs(session.user.id);
     } catch (error) {
       console.error("Error checking auth:", error);
@@ -412,7 +412,7 @@ const MechanicDashboard = () => {
         setWatchId(null);
         setIsSharing(false);
       }
-      
+
       // Set availability to offline
       if (user?.id) {
         try {
@@ -424,14 +424,14 @@ const MechanicDashboard = () => {
           console.error("Error updating availability status:", error);
         }
       }
-      
+
       // Sign out from Supabase
       await supabase.auth.signOut();
-      
+
       // Clear storage
       localStorage.clear();
       sessionStorage.clear();
-      
+
       toast.success("Signed out successfully");
       navigate("/");
     } catch (error) {
@@ -442,6 +442,7 @@ const MechanicDashboard = () => {
 
   const fetchJobs = async (mechanicId: string) => {
     try {
+      // Step 1: Fetch jobs
       const { data, error } = await supabase
         .from("job_requests")
         .select("*")
@@ -449,7 +450,29 @@ const MechanicDashboard = () => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      
+
+      // Step 2: Get unique user IDs
+      const userIds = [...new Set((data || []).map(job => job.user_id).filter(Boolean))];
+
+      // Step 3: Fetch user profiles separately
+      let userProfiles: any[] = [];
+      if (userIds.length > 0) {
+        const { data: profiles, error: profileError } = await supabase
+          .from("profiles")
+          .select("id, full_name, phone")
+          .in("id", userIds);
+
+        if (profileError) {
+          console.error("Error fetching user profiles:", profileError);
+        } else {
+          userProfiles = profiles || [];
+        }
+      }
+
+      // Step 4: Create a map of user profiles
+      const profileMap = new window.Map(userProfiles.map(p => [p.id, p]));
+
+      // Step 5: Format jobs with user data
       const formattedJobs = (data || []).map(job => {
         // Parse user_location if it's a string or ensure it's an object
         let userLocation = job.user_location;
@@ -469,13 +492,18 @@ const MechanicDashboard = () => {
             }
           }
         }
-        
+
+        // Get user profile from map
+        const userProfile = profileMap.get(job.user_id);
+
         return {
           ...job,
-          user_location: userLocation as { lat: number; lng: number } | null
+          user_location: userLocation as { lat: number; lng: number } | null,
+          user_name: userProfile?.full_name || null,
+          user_phone: userProfile?.phone || null,
         };
       });
-      
+
       setJobs(formattedJobs);
       // Update ref with current jobs count
       lastJobCountRef.current = formattedJobs.length;
@@ -490,7 +518,7 @@ const MechanicDashboard = () => {
     try {
       const { error } = await supabase
         .from("job_requests")
-        .update({ 
+        .update({
           status: newStatus,
           updated_at: new Date().toISOString()
         })
@@ -499,7 +527,7 @@ const MechanicDashboard = () => {
       if (error) throw error;
 
       // Update local state
-      setJobs(jobs.map(job => 
+      setJobs(jobs.map(job =>
         job.id === jobId ? { ...job, status: newStatus } : job
       ));
 
@@ -515,11 +543,11 @@ const MechanicDashboard = () => {
 
   const handleAcceptJob = async (jobId: string) => {
     if (!user?.id) return;
-    
+
     try {
       const { error } = await supabase
         .from("job_requests")
-        .update({ 
+        .update({
           status: "accepted",
           mechanic_id: user.id,
           updated_at: new Date().toISOString()
@@ -546,7 +574,7 @@ const MechanicDashboard = () => {
       // Remove mechanic assignment and reset status to pending for reassignment
       const { error } = await supabase
         .from("job_requests")
-        .update({ 
+        .update({
           status: "pending",
           mechanic_id: null,
           updated_at: new Date().toISOString()
@@ -557,7 +585,7 @@ const MechanicDashboard = () => {
 
       // Remove from jobs list since it's no longer assigned to this mechanic
       setJobs(jobs.filter(job => job.id !== jobId));
-      
+
       if (user?.id) {
         fetchJobs(user.id);
       }
@@ -573,7 +601,7 @@ const MechanicDashboard = () => {
   const handleStatusTransition = async (jobId: string, currentStatus: string, transition: string) => {
     // Validate transition using XState machine logic
     const { canTransition } = await import('@/machines/jobStatusMachine');
-    
+
     let targetStatus = '';
     switch (transition) {
       case 'ARRIVE':
@@ -600,7 +628,7 @@ const MechanicDashboard = () => {
   const startLocationSharing = async () => {
     // Import geolocation utility
     const { getLocation, watchPosition, isSecureContext } = await import("@/utils/geolocation");
-    
+
     // Check if we're on HTTP (non-HTTPS) - show info but still try
     if (!isSecureContext()) {
       toast.info("Requesting location access. Please allow when prompted.", {
@@ -759,7 +787,7 @@ const MechanicDashboard = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      
+
       <main className="flex-1 container mx-auto px-3 sm:px-4 py-4 sm:py-6 lg:py-8">
         <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row justify-between items-start gap-4">
           <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
@@ -778,7 +806,7 @@ const MechanicDashboard = () => {
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
             {user?.id && (
-              <MechanicOnlineToggle 
+              <MechanicOnlineToggle
                 mechanicId={user.id}
                 onStatusChange={(isOnline) => {
                   console.log(`[MechanicDashboard] Status changed to: ${isOnline ? 'online' : 'offline'}`);
@@ -800,8 +828,8 @@ const MechanicDashboard = () => {
               />
             )}
 
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => navigate("/mechanic/profile")}
               className="gap-2 text-xs sm:text-sm"
               size="sm"
@@ -865,7 +893,7 @@ const MechanicDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
-                {jobs.filter(j => 
+                {jobs.filter(j =>
                   ['accepted', 'on_the_way', 'reached_destination', 'repair_started', 'repair_completed'].includes(j.status)
                 ).length}
               </div>
@@ -928,9 +956,9 @@ const MechanicDashboard = () => {
                               </span>
                             </div>
                             {job.user_id && user?.id && (
-                              <ChatButton 
+                              <ChatButton
                                 key={job.id}
-                                requestId={job.id} 
+                                requestId={job.id}
                                 userId={user.id}
                                 unreadCount={getUnreadCount(job.id)}
                                 onOpen={() => handleChatOpen(job.id)}
