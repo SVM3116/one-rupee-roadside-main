@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { MapPin, Navigation, CheckCircle } from 'lucide-react';
+import { MapPin, Navigation, CheckCircle, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatButton from './ChatButton';
 
@@ -14,6 +14,9 @@ interface JobRequest {
   issue_description: string | null;
   vehicle_type: string | null;
   created_at: string;
+  mechanic_name?: string | null;
+  mechanic_phone?: string | null;
+  mechanic_photo?: string | null;
 }
 
 interface TrackingPanelProps {
@@ -44,17 +47,17 @@ const TrackingPanel = ({ userId, onTrackingStart, getUnreadCount, onChatOpen }: 
           console.log('📨 TrackingPanel: Job update received:', payload);
           const newData = payload.new as JobRequest;
           const oldData = payload.old as any;
-          
+
           setActiveJob(newData);
-          
+
           // Handle all status changes, not just 'on_the_way'
           if (payload.eventType === 'UPDATE') {
             const oldStatus = oldData?.status;
             const newStatus = newData.status;
-            
+
             if (oldStatus !== newStatus) {
               console.log(`📢 TrackingPanel: Status changed ${oldStatus} → ${newStatus}`);
-              
+
               // Trigger tracking for any active status
               if (newData.status !== 'completed' && newData.status !== 'cancelled' && newData.mechanic_id) {
                 onTrackingStart?.(newData.mechanic_id, newData.id);
@@ -84,9 +87,24 @@ const TrackingPanel = ({ userId, onTrackingStart, getUnreadCount, onChatOpen }: 
         .maybeSingle();
 
       if (error) throw error;
-      
+
+      // Fetch mechanic profile if mechanic is assigned
+      if (data && data.mechanic_id) {
+        const { data: mechanicProfile, error: profileError } = await supabase
+          .from('profiles')
+          .select('full_name, phone, profile_photo')
+          .eq('id', data.mechanic_id)
+          .maybeSingle();
+
+        if (!profileError && mechanicProfile) {
+          data.mechanic_name = mechanicProfile.full_name;
+          data.mechanic_phone = mechanicProfile.phone;
+          data.mechanic_photo = mechanicProfile.profile_photo;
+        }
+      }
+
       setActiveJob(data);
-      
+
       // Start tracking for any active status (not completed/cancelled)
       if (data && data.status !== 'completed' && data.status !== 'cancelled' && data.mechanic_id) {
         onTrackingStart?.(data.mechanic_id, data.id);
@@ -158,7 +176,7 @@ const TrackingPanel = ({ userId, onTrackingStart, getUnreadCount, onChatOpen }: 
       <CardContent>
         <div className="flex flex-col items-center text-center space-y-4">
           {getStatusIcon(activeJob.status)}
-          
+
           <div>
             <h3 className="font-semibold text-lg">
               {activeJob.status === 'pending' && 'Finding a mechanic...'}
@@ -168,7 +186,7 @@ const TrackingPanel = ({ userId, onTrackingStart, getUnreadCount, onChatOpen }: 
               {activeJob.status === 'repair_started' && 'Repair in Progress...'}
               {activeJob.status === 'repair_completed' && 'Repair Completed!'}
               {activeJob.status === 'completed' && 'Job Completed!'}
-              {!['pending', 'accepted', 'on_the_way', 'reached_destination', 'repair_started', 'repair_completed', 'completed'].includes(activeJob.status) && 
+              {!['pending', 'accepted', 'on_the_way', 'reached_destination', 'repair_started', 'repair_completed', 'completed'].includes(activeJob.status) &&
                 `Status: ${activeJob.status.replace('_', ' ')}`}
             </h3>
             <p className="text-sm text-muted-foreground mt-2">
@@ -180,6 +198,42 @@ const TrackingPanel = ({ userId, onTrackingStart, getUnreadCount, onChatOpen }: 
               </p>
             )}
           </div>
+
+          {/* Mechanic Details - Show after accepting */}
+          {activeJob.mechanic_id && activeJob.status !== 'pending' && (activeJob.mechanic_name || activeJob.mechanic_phone) && (
+            <div className="w-full mt-4 p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+              <p className="text-xs font-semibold text-green-900 dark:text-green-100 mb-2">Assigned Mechanic</p>
+              <div className="flex items-center gap-3">
+                {activeJob.mechanic_photo ? (
+                  <img
+                    src={activeJob.mechanic_photo}
+                    alt={activeJob.mechanic_name || 'Mechanic'}
+                    className="h-10 w-10 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="h-10 w-10 rounded-full bg-green-200 dark:bg-green-800 flex items-center justify-center">
+                    <span className="text-sm font-semibold text-green-900 dark:text-green-100">
+                      {activeJob.mechanic_name?.charAt(0).toUpperCase() || 'M'}
+                    </span>
+                  </div>
+                )}
+                <div className="flex-1">
+                  <p className="font-medium text-sm text-green-900 dark:text-green-100">
+                    {activeJob.mechanic_name || 'Mechanic'}
+                  </p>
+                  {activeJob.mechanic_phone && (
+                    <a
+                      href={`tel:${activeJob.mechanic_phone}`}
+                      className="text-xs text-green-600 dark:text-green-400 hover:underline flex items-center gap-1"
+                    >
+                      <Phone className="h-3 w-3" />
+                      {activeJob.mechanic_phone}
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {['on_the_way', 'reached_destination', 'repair_started', 'repair_completed'].includes(activeJob.status) && (
             <p className="text-sm text-green-600 font-medium">

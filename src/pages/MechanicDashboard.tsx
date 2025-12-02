@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Navigation, Clock, CheckCircle, Loader2, User, Settings, XCircle, ExternalLink, LogOut } from "lucide-react";
+import { MapPin, Navigation, Clock, CheckCircle, Loader2, User, Settings, XCircle, ExternalLink, LogOut, Phone } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import Map from "@/components/Map";
@@ -19,6 +19,7 @@ import JobStatusManager from "@/components/JobStatusManager";
 import ChatNotificationBadge from "@/components/ChatNotificationBadge";
 import { useChatNotifications } from "@/hooks/useChatNotifications";
 import api from '@/lib/api';
+import { SwipeButton } from "@/components/SwipeButton";
 
 interface Job {
   id: string;
@@ -31,6 +32,8 @@ interface Job {
     lng: number;
   };
   created_at: string;
+  user_name?: string | null;
+  user_phone?: string | null;
 }
 
 const MechanicDashboard = () => {
@@ -921,6 +924,149 @@ const MechanicDashboard = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Current Job Status - Show active job with swipe button */}
+        {(() => {
+          const activeJob = jobs.find(j =>
+            ['accepted', 'on_the_way', 'reached_destination', 'repair_started', 'repair_completed'].includes(j.status)
+          );
+
+          if (!activeJob) return null;
+
+          const getStatusBadge = (status: string) => {
+            const statusConfig = {
+              accepted: { label: 'Accepted', className: 'bg-blue-600' },
+              on_the_way: { label: 'On The Way', className: 'bg-orange-600' },
+              reached_destination: { label: 'Reached', className: 'bg-blue-600' },
+              repair_started: { label: 'Repair Started', className: 'bg-yellow-600' },
+              repair_completed: { label: 'Repair Completed', className: 'bg-green-600' },
+            };
+            const config = statusConfig[status as keyof typeof statusConfig] || { label: status, className: 'bg-gray-600' };
+            return <Badge className={config.className}>{config.label}</Badge>;
+          };
+
+          const getStatusMessage = (status: string) => {
+            switch (status) {
+              case 'accepted':
+                return 'Job Accepted - Ready to Start!';
+              case 'on_the_way':
+                return 'On The Way to Customer';
+              case 'reached_destination':
+                return 'Reached Customer Location';
+              case 'repair_started':
+                return 'Repair in Progress';
+              case 'repair_completed':
+                return 'Repair Completed!';
+              default:
+                return `Status: ${status.replace('_', ' ')}`;
+            }
+          };
+
+          // Get card background tint based on status
+          const getCardTint = (status: string) => {
+            const tints = {
+              accepted: 'rgba(59, 130, 246, 0.03)', // Blue tint
+              on_the_way: 'rgba(251, 146, 60, 0.03)', // Orange tint
+              reached_destination: 'rgba(59, 130, 246, 0.03)', // Blue tint
+              repair_started: 'rgba(250, 204, 21, 0.03)', // Yellow tint
+              repair_completed: 'rgba(34, 197, 94, 0.03)', // Green tint
+            };
+            return tints[status as keyof typeof tints] || 'transparent';
+          };
+
+          return (
+            <Card className="mb-6" style={{ background: getCardTint(activeJob.status) }}>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Current Job Status</span>
+                  {getStatusBadge(activeJob.status)}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col items-center text-center space-y-4">
+                  {getStatusIcon(activeJob.status)}
+
+                  <div>
+                    <h3 className="font-semibold text-lg">
+                      {getStatusMessage(activeJob.status)}
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {activeJob.vehicle_type && `Vehicle: ${activeJob.vehicle_type}`}
+                    </p>
+                    {activeJob.issue_description && (
+                      <p className="text-sm text-muted-foreground">
+                        Issue: {activeJob.issue_description}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Customer Details */}
+                  {activeJob.status !== 'pending' && (activeJob.user_name || activeJob.user_phone) && (
+                    <div className="w-full mt-4 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <p className="text-xs font-semibold text-blue-900 dark:text-blue-100 mb-2">Customer Details</p>
+                      <div className="space-y-1">
+                        {activeJob.user_name && (
+                          <p className="font-medium text-sm text-blue-900 dark:text-blue-100">
+                            {activeJob.user_name}
+                          </p>
+                        )}
+                        {activeJob.user_phone && (
+                          <a
+                            href={`tel:${activeJob.user_phone}`}
+                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center justify-center gap-1"
+                          >
+                            <Phone className="h-3 w-3" />
+                            {activeJob.user_phone}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Navigate to Customer Button */}
+                  {activeJob.user_location && (
+                    <div className="w-full mt-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const { lat, lng } = activeJob.user_location;
+                          const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+                          window.open(googleMapsUrl, '_blank');
+                        }}
+                        className="w-full text-xs sm:text-sm"
+                      >
+                        <Navigation className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                        <span className="hidden sm:inline">Navigate to Customer</span>
+                        <span className="sm:hidden">Navigate</span>
+                        <ExternalLink className="h-3 w-3 ml-1 sm:ml-2" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Swipe Button - ONLY THIS REPLACES THE OLD BUTTONS */}
+                  <SwipeButton
+                    currentStatus={activeJob.status}
+                    onStatusUpdate={(newStatus) => updateJobStatus(activeJob.id, newStatus)}
+                  />
+
+                  {activeJob.user_id && user?.id && (
+                    <div className="mt-4">
+                      <ChatButton
+                        requestId={activeJob.id}
+                        userId={user.id}
+                        unreadCount={getUnreadCount(activeJob.id)}
+                        onOpen={() => handleChatOpen(activeJob.id)}
+                        senderType="mechanic"
+                      />
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           <Card>
