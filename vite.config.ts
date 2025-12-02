@@ -26,6 +26,7 @@ if (!hasCert) {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  base: '/', // CRITICAL: Set base to '/' for Vercel
   server: {
     host: "0.0.0.0", // Allow access from network
     port: 8080,
@@ -54,6 +55,16 @@ export default defineConfig(({ mode }) => ({
         }
       }
     }
+  },
+  build: {
+    outDir: 'dist', // Output directory
+    assetsDir: 'assets', // Assets directory
+    sourcemap: false, // Disable sourcemaps for production
+    rollupOptions: {
+      output: {
+        manualChunks: undefined, // Let Vite handle chunking
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
