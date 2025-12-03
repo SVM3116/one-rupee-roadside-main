@@ -3,8 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { MapPin, Navigation, CheckCircle, Phone } from 'lucide-react';
+import { MapPin, Navigation, CheckCircle, Phone, Settings, User } from 'lucide-react';
 import { toast } from 'sonner';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import ChatButton from './ChatButton';
 
 interface JobRequest {
@@ -24,9 +25,10 @@ interface TrackingPanelProps {
   onTrackingStart?: (mechanicId: string, jobId: string) => void;
   getUnreadCount?: (requestId: string) => number;
   onChatOpen?: (requestId: string) => void;
+  onChatClose?: () => void;
 }
 
-const TrackingPanel = ({ userId, onTrackingStart, getUnreadCount, onChatOpen }: TrackingPanelProps) => {
+const TrackingPanel = ({ userId, onTrackingStart, getUnreadCount, onChatOpen, onChatClose }: TrackingPanelProps) => {
   const [activeJob, setActiveJob] = useState<JobRequest | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -97,9 +99,10 @@ const TrackingPanel = ({ userId, onTrackingStart, getUnreadCount, onChatOpen }: 
           .maybeSingle();
 
         if (!profileError && mechanicProfile) {
-          data.mechanic_name = mechanicProfile.full_name;
-          data.mechanic_phone = mechanicProfile.phone;
-          data.mechanic_photo = mechanicProfile.profile_photo;
+          const profile = mechanicProfile as any;
+          (data as any).mechanic_name = profile.full_name;
+          (data as any).mechanic_phone = profile.phone;
+          (data as any).mechanic_photo = profile.profile_photo;
         }
       }
 
@@ -147,114 +150,138 @@ const TrackingPanel = ({ userId, onTrackingStart, getUnreadCount, onChatOpen }: 
     return <Badge className={config.className}>{config.label}</Badge>;
   };
 
+  const getCardStyle = (status: string) => {
+    const styles = {
+      pending: 'from-yellow-50 to-yellow-100 dark:from-yellow-950 dark:to-yellow-900 border-yellow-200 dark:border-yellow-800',
+      accepted: 'from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800',
+      on_the_way: 'from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900 border-orange-200 dark:border-orange-800',
+      reached_destination: 'from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800',
+      repair_started: 'from-yellow-50 to-yellow-100 dark:from-yellow-950 dark:to-yellow-900 border-yellow-200 dark:border-yellow-800',
+      repair_completed: 'from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800',
+      completed: 'from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800',
+    };
+    return styles[status as keyof typeof styles] || 'from-gray-50 to-gray-100 border-gray-200';
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'on_the_way':
-        return <Navigation className="h-12 w-12 text-green-600 animate-pulse" />;
+      case 'pending':
+        return <Settings className="h-12 w-12 text-yellow-600 animate-spin-slow drop-shadow-xl" />;
       case 'accepted':
-        return <CheckCircle className="h-12 w-12 text-blue-600" />;
+        return <CheckCircle className="h-12 w-12 text-blue-600 animate-bounce drop-shadow-xl" />;
+      case 'on_the_way':
+        return <Navigation className="h-12 w-12 text-orange-600 animate-pulse drop-shadow-xl" />;
       case 'reached_destination':
-        return <MapPin className="h-12 w-12 text-green-600" />;
+        return <MapPin className="h-12 w-12 text-purple-600 animate-bounce drop-shadow-xl" />;
       case 'repair_started':
+        return <Settings className="h-12 w-12 text-yellow-600 animate-spin-slow drop-shadow-xl" />;
       case 'repair_completed':
-        return <CheckCircle className="h-12 w-12 text-orange-600" />;
+        return <CheckCircle className="h-12 w-12 text-green-600 animate-bounce drop-shadow-xl" />;
       case 'completed':
-        return <CheckCircle className="h-12 w-12 text-green-600" />;
+        return <CheckCircle className="h-12 w-12 text-green-600 drop-shadow-xl" />;
       default:
-        return <MapPin className="h-12 w-12 text-yellow-600" />;
+        return <MapPin className="h-12 w-12 text-gray-600" />;
     }
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span>Job Status</span>
-          {getStatusBadge(activeJob.status)}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-col items-center text-center space-y-4">
-          {getStatusIcon(activeJob.status)}
+    <div className="relative group h-full">
+      {/* Animated Glow Effect */}
+      <div className={`absolute -inset-1 bg-gradient-to-r ${getCardStyle(activeJob.status).split(' ')[0].replace('50', '400').replace('100', '600')} rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200 animate-tilt`}></div>
 
-          <div>
-            <h3 className="font-semibold text-lg">
-              {activeJob.status === 'pending' && 'Finding a mechanic...'}
-              {activeJob.status === 'accepted' && 'Mechanic Accepted Your Request!'}
-              {activeJob.status === 'on_the_way' && 'Mechanic is On The Way!'}
-              {activeJob.status === 'reached_destination' && 'Mechanic Has Reached Your Location!'}
-              {activeJob.status === 'repair_started' && 'Repair in Progress...'}
-              {activeJob.status === 'repair_completed' && 'Repair Completed!'}
-              {activeJob.status === 'completed' && 'Job Completed!'}
-              {!['pending', 'accepted', 'on_the_way', 'reached_destination', 'repair_started', 'repair_completed', 'completed'].includes(activeJob.status) &&
-                `Status: ${activeJob.status.replace('_', ' ')}`}
-            </h3>
-            <p className="text-sm text-muted-foreground mt-2">
-              {activeJob.vehicle_type && `Vehicle: ${activeJob.vehicle_type}`}
-            </p>
-            {activeJob.issue_description && (
-              <p className="text-sm text-muted-foreground">
-                Issue: {activeJob.issue_description}
+      <Card className={`relative bg-gradient-to-br ${getCardStyle(activeJob.status)} border-2 shadow-xl overflow-hidden h-full flex flex-col justify-center`}>
+        <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rotate-45 transform"></div>
+
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center justify-between">
+            <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300">
+              Job Status
+            </span>
+            {getStatusBadge(activeJob.status)}
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent className="pt-2 pb-4 px-4 flex-1 flex flex-col justify-center">
+          <div className="flex flex-col items-center text-center space-y-4">
+            {/* Animated Icon Container */}
+            <div className="relative p-3 rounded-full bg-white/50 dark:bg-black/20 backdrop-blur-sm shadow-inner">
+              {getStatusIcon(activeJob.status)}
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="font-extrabold text-lg sm:text-xl bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-600 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                {activeJob.status === 'pending' && 'Finding a mechanic...'}
+                {activeJob.status === 'accepted' && 'Mechanic Accepted! 🚀'}
+                {activeJob.status === 'on_the_way' && 'Mechanic is On The Way! 🚗💨'}
+                {activeJob.status === 'reached_destination' && 'Mechanic Arrived! 📍'}
+                {activeJob.status === 'repair_started' && 'Repair in Progress... 🔧'}
+                {activeJob.status === 'repair_completed' && 'Repair Completed! 🎉'}
+                {activeJob.status === 'completed' && 'Job Completed! ✅'}
+                {!['pending', 'accepted', 'on_the_way', 'reached_destination', 'repair_started', 'repair_completed', 'completed'].includes(activeJob.status) &&
+                  `Status: ${activeJob.status.replace('_', ' ')}`}
+              </h3>
+              <p className="text-sm font-medium text-muted-foreground">
+                {activeJob.vehicle_type && <span className="inline-flex items-center gap-1 bg-white/50 dark:bg-black/20 px-2 py-0.5 rounded-md text-xs">🚗 {activeJob.vehicle_type}</span>}
               </p>
-            )}
-          </div>
+              {activeJob.issue_description && (
+                <p className="text-xs text-muted-foreground max-w-xs mx-auto bg-white/40 dark:bg-black/10 p-1.5 rounded-lg italic line-clamp-2">
+                  "{activeJob.issue_description}"
+                </p>
+              )}
+            </div>
 
-          {/* Mechanic Details - Show after accepting */}
-          {activeJob.mechanic_id && activeJob.status !== 'pending' && (activeJob.mechanic_name || activeJob.mechanic_phone) && (
-            <div className="w-full mt-4 p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
-              <p className="text-xs font-semibold text-green-900 dark:text-green-100 mb-2">Assigned Mechanic</p>
-              <div className="flex items-center gap-3">
-                {activeJob.mechanic_photo ? (
-                  <img
-                    src={activeJob.mechanic_photo}
-                    alt={activeJob.mechanic_name || 'Mechanic'}
-                    className="h-10 w-10 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="h-10 w-10 rounded-full bg-green-200 dark:bg-green-800 flex items-center justify-center">
-                    <span className="text-sm font-semibold text-green-900 dark:text-green-100">
+            {/* Mechanic Details */}
+            {activeJob.mechanic_id && activeJob.status !== 'pending' && (activeJob.mechanic_name || activeJob.mechanic_phone) && (
+              <div className="w-full mt-4 p-3 bg-white/60 dark:bg-black/40 backdrop-blur-md rounded-lg border border-white/20 shadow-sm hover:shadow-md transition-all duration-300">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Assigned Mechanic</p>
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10 border-2 border-primary/20">
+                    <AvatarImage src={activeJob.mechanic_photo || undefined} />
+                    <AvatarFallback className="bg-primary/10 text-primary font-bold">
                       {activeJob.mechanic_name?.charAt(0).toUpperCase() || 'M'}
-                    </span>
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 text-left">
+                    <p className="font-bold text-sm text-foreground">
+                      {activeJob.mechanic_name || 'Mechanic'}
+                    </p>
+                    {activeJob.mechanic_phone && (
+                      <a
+                        href={`tel:${activeJob.mechanic_phone}`}
+                        className="text-xs text-green-600 dark:text-green-400 hover:underline flex items-center gap-1 font-medium"
+                      >
+                        <Phone className="h-3 w-3" />
+                        {activeJob.mechanic_phone}
+                      </a>
+                    )}
                   </div>
-                )}
-                <div className="flex-1">
-                  <p className="font-medium text-sm text-green-900 dark:text-green-100">
-                    {activeJob.mechanic_name || 'Mechanic'}
-                  </p>
-                  {activeJob.mechanic_phone && (
-                    <a
-                      href={`tel:${activeJob.mechanic_phone}`}
-                      className="text-xs text-green-600 dark:text-green-400 hover:underline flex items-center gap-1"
-                    >
-                      <Phone className="h-3 w-3" />
-                      {activeJob.mechanic_phone}
-                    </a>
-                  )}
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {['on_the_way', 'reached_destination', 'repair_started', 'repair_completed'].includes(activeJob.status) && (
-            <p className="text-sm text-green-600 font-medium">
-              Track the mechanic's location on the map above
-            </p>
-          )}
+            {['on_the_way', 'reached_destination', 'repair_started', 'repair_completed'].includes(activeJob.status) && (
+              <p className="text-xs text-green-600 font-bold animate-pulse">
+                Track the mechanic's location on the map above
+              </p>
+            )}
 
-          {activeJob.mechanic_id && (
-            <div className="mt-4">
-              <ChatButton
-                requestId={activeJob.id}
-                userId={userId}
-                unreadCount={getUnreadCount ? getUnreadCount(activeJob.id) : 0}
-                onOpen={onChatOpen ? () => onChatOpen(activeJob.id) : undefined}
-                senderType="user"
-              />
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+            {activeJob.mechanic_id && (
+              <div className="w-full mt-2">
+                <ChatButton
+                  requestId={activeJob.id}
+                  userId={userId}
+                  unreadCount={getUnreadCount ? getUnreadCount(activeJob.id) : 0}
+                  onOpen={onChatOpen ? () => onChatOpen(activeJob.id) : undefined}
+                  onClose={onChatClose}
+                  senderType="user"
+                  className="w-full h-12 shadow-sm"
+                />
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 

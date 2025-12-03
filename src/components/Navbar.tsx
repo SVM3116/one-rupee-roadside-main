@@ -93,25 +93,36 @@ const Navbar = () => {
           {/* Auth Buttons */}
           <div className="hidden md:flex items-center space-x-3">
             {userId && <NotificationBell userId={userId} />}
-            {!userId ? (
-              <>
-                <Link to="/auth">
-                  <Button variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground font-medium">
-                    Traveller Login
-                  </Button>
-                </Link>
-                <Link to="/auth?role=mechanic">
-                  <Button variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground font-medium">
-                    🔧 Mechanic Login
-                  </Button>
-                </Link>
-                <Link to="/auth">
-                  <Button className="bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-opacity">
-                    Sign Up
-                  </Button>
-                </Link>
-              </>
-            ) : (
+            <Link to="/auth">
+              <Button
+                variant="outline"
+                className="relative overflow-hidden border-2 border-primary text-primary hover:text-white font-semibold transition-all duration-300 hover:scale-105 hover:shadow-lg group"
+              >
+                <span className="absolute inset-0 bg-gradient-to-r from-primary to-blue-600 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-300 ease-out"></span>
+                <span className="relative z-10 flex items-center gap-1">
+                  <span className="group-hover:translate-x-1 transition-transform duration-300">🚗</span>
+                  Traveller Login
+                </span>
+              </Button>
+            </Link>
+            <Link to="/auth?role=mechanic">
+              <Button
+                variant="outline"
+                className="relative overflow-hidden border-2 border-orange-500 text-orange-600 hover:text-white font-semibold transition-all duration-300 hover:scale-105 hover:shadow-lg group"
+              >
+                <span className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-500 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-300 ease-out"></span>
+                <span className="relative z-10 flex items-center gap-1">
+                  <span className="group-hover:rotate-12 transition-transform duration-300">🔧</span>
+                  Mechanic Login
+                </span>
+              </Button>
+            </Link>
+            <Link to="/auth">
+              <Button className="bg-gradient-to-r from-primary to-accent hover:opacity-90 text-white transition-all duration-300 hover:scale-105 hover:shadow-lg">
+                Sign Up
+              </Button>
+            </Link>
+            {userId && (
               <Link to="/profile">
                 <Button variant="ghost">Profile</Button>
               </Link>
@@ -170,17 +181,31 @@ const Navbar = () => {
             )}
             <div className="flex flex-col space-y-2 pt-4">
               <Link to="/auth">
-                <Button variant="outline" className="w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground font-medium">
-                  Traveller Login
+                <Button
+                  variant="outline"
+                  className="w-full relative overflow-hidden border-2 border-primary text-primary hover:text-white font-semibold transition-all duration-300 hover:scale-105 hover:shadow-lg group"
+                >
+                  <span className="absolute inset-0 bg-gradient-to-r from-primary to-blue-600 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-300 ease-out"></span>
+                  <span className="relative z-10 flex items-center justify-center gap-1">
+                    <span className="group-hover:translate-x-1 transition-transform duration-300">🚗</span>
+                    Traveller Login
+                  </span>
                 </Button>
               </Link>
               <Link to="/auth?role=mechanic">
-                <Button variant="outline" className="w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground font-medium">
-                  🔧 Mechanic Login
+                <Button
+                  variant="outline"
+                  className="w-full relative overflow-hidden border-2 border-orange-500 text-orange-600 hover:text-white font-semibold transition-all duration-300 hover:scale-105 hover:shadow-lg group"
+                >
+                  <span className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-500 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-300 ease-out"></span>
+                  <span className="relative z-10 flex items-center justify-center gap-1">
+                    <span className="group-hover:rotate-12 transition-transform duration-300">🔧</span>
+                    Mechanic Login
+                  </span>
                 </Button>
               </Link>
               <Link to="/auth">
-                <Button className="w-full bg-gradient-to-r from-primary to-accent">
+                <Button className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90 text-white transition-all duration-300 hover:scale-105 hover:shadow-lg">
                   Sign Up
                 </Button>
               </Link>

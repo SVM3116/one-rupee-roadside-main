@@ -45,10 +45,10 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
 
   const getCurrentLocation = async () => {
     setLocationLoading(true);
-    
+
     try {
       const { getLocation, isSecureContext } = await import("@/utils/geolocation");
-      
+
       // Check if we're on HTTP (non-HTTPS) - show info but still try
       if (!isSecureContext()) {
         toast.info("Requesting location access. Please allow when prompted.", {
@@ -79,7 +79,7 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate form data
     try {
       requestSchema.parse({ vehicleType, issueDescription });
@@ -101,7 +101,7 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session) {
         toast.error("Please sign in to request assistance");
         navigate("/auth");
@@ -116,7 +116,7 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
           const uploadPromises = mediaFiles.map(async (file, index) => {
             const fileExt = file.name.split(".").pop();
             const fileName = `${session.user.id}/job_media_${Date.now()}_${index}.${fileExt}`;
-            
+
             const { error: uploadError } = await supabase.storage
               .from("job-media")
               .upload(fileName, file);
@@ -142,7 +142,7 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
       // Insert the job and return the created row
       // Format location as a string for the location column
       const locationString = `${location.lat}, ${location.lng}`;
-      
+
       const insertData: any = {
         user_id: session.user.id,
         vehicle_type: vehicleType,
@@ -182,18 +182,18 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
         // Fetch LIVE mechanic locations
         console.log("🔍 Searching for nearby mechanics...");
         console.log("📍 User location:", location);
-        
+
         // Try multiple approaches to get mechanic locations
         let locations: any[] | null = null;
         let locError: any = null;
-        
+
         // CRITICAL: Fetch ALL mechanic locations first (don't filter by online status yet)
         console.log("🔍 [Request] Step 1: Fetching ALL mechanic locations...");
         const { data: directLocations, error: directError } = await supabase
           .from("mechanic_locations")
           .select("mechanic_id, latitude, longitude, updated_at")
           .order("updated_at", { ascending: false });
-        
+
         if (directError) {
           console.error("❌ [Request] Error fetching mechanic_locations:", directError);
           console.error("   Code:", directError.code);
@@ -212,14 +212,14 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
             })));
           }
         }
-        
+
         // Also fetch online mechanics from profiles to cross-reference
         console.log("🔍 [Request] Step 2: Fetching online mechanics from profiles...");
         const { data: onlineMechanics, error: profileError } = await supabase
           .from("profiles")
           .select("id, availability_status, verification_status")
           .eq("availability_status", "online");
-        
+
         if (profileError) {
           console.error("❌ [Request] Error fetching online mechanics from profiles:", profileError);
           console.warn("⚠️ [Request] Will continue with all locations - profile check failed");
@@ -235,19 +235,19 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
             console.warn("   3. Will still try to assign using all locations");
           }
         }
-        
+
         // USE ALL LOCATIONS - we'll check online status during assignment
         if (!directError && directLocations && directLocations.length > 0) {
           locations = directLocations;
           console.log(`✅ [Request] Using ALL ${directLocations.length} mechanic locations for matching`);
           console.log(`   Will check online status during assignment (more lenient)`);
-          
+
           // Log if there's a mismatch
           if (onlineMechanics && onlineMechanics.length > 0) {
             const onlineMechanicIds = new Set(onlineMechanics.map((m: any) => m.id));
             const matchingLocations = directLocations.filter((loc: any) => onlineMechanicIds.has(loc.mechanic_id));
             console.log(`📊 [Request] ${matchingLocations.length} locations match online mechanics (out of ${directLocations.length} total)`);
-            
+
             if (matchingLocations.length === 0 && directLocations.length > 0) {
               console.warn("⚠️ [Request] WARNING: Found mechanic locations but none match online mechanics!");
               console.warn("   Location mechanic IDs:", directLocations.map((l: any) => l.mechanic_id));
@@ -261,13 +261,13 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
         } else {
           console.warn("⚠️ Direct query failed, trying view...", directError);
           locError = directError;
-          
+
           // Approach 2: Try using the view (if it exists)
           const { data: viewLocations, error: viewError } = await supabase
             .from("online_mechanic_locations")
             .select("mechanic_id, latitude, longitude, updated_at")
             .order("updated_at", { ascending: false });
-          
+
           if (!viewError && viewLocations) {
             locations = viewLocations;
             console.log("✅ View query successful");
@@ -285,14 +285,14 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
             details: locError.details,
             hint: locError.hint
           });
-          
+
           // If RLS is blocking, try a different approach - check if we can at least see profiles
           console.log("⚠️ Trying alternative approach: checking profiles for online mechanics...");
           const { data: profiles, error: profileError } = await supabase
             .from("profiles")
             .select("id, availability_status")
             .eq("availability_status", "online");
-          
+
           if (profileError) {
             console.error("❌ Also failed to check profiles:", profileError);
             toast.error("Failed to search for mechanics. Please check RLS policies or try again.");
@@ -359,7 +359,7 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
 
           console.log(`📊 [Request] Found ${recentLocations.length} mechanics with locations (including all, regardless of age)`);
           console.log(`📍 [Request] User location: ${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`);
-          
+
           if (recentLocations.length === 0) {
             console.error("❌ [Request] CRITICAL: No mechanic locations found at all!");
             console.error("   This means:");
@@ -383,8 +383,8 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
               const dist = distanceMeters(location.lat, location.lng, lat, lng);
               // Handle exact same location (distance = 0 or very small) - ACCEPT ALWAYS
               const isSameLocation = dist < 50; // Less than 50 meters = same location (very lenient)
-              const distanceDisplay = isSameLocation 
-                ? `SAME LOCATION (${dist.toFixed(1)}m)` 
+              const distanceDisplay = isSameLocation
+                ? `SAME LOCATION (${dist.toFixed(1)}m)`
                 : `${(dist / 1000).toFixed(2)}km (${dist.toFixed(0)}m)`;
               console.log(`📍 Mechanic ${loc.mechanic_id}:`);
               console.log(`   Location: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
@@ -451,25 +451,25 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
             // This is more lenient to ensure jobs get assigned
             let chosen: string | null = null;
             let checkedCount = 0;
-            
+
             console.log(`🎯 Starting aggressive matching for ${candidates.length} candidates...`);
-            
+
             for (const cand of candidates) {
               checkedCount++;
-              const distanceText = cand.dist < 1000 
-                ? `${cand.dist.toFixed(0)}m away` 
+              const distanceText = cand.dist < 1000
+                ? `${cand.dist.toFixed(0)}m away`
                 : `${(cand.dist / 1000).toFixed(2)}km away`;
-              
+
               console.log(`🔍 [Request] Checking mechanic ${cand.mechanic_id} (${distanceText})...`);
               console.log(`   [Request] Mechanic location: ${cand.lat.toFixed(6)}, ${cand.lng.toFixed(6)}`);
               console.log(`   [Request] User location: ${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`);
               console.log(`   [Request] Distance: ${cand.dist.toFixed(2)}m (${(cand.dist / 1000).toFixed(3)}km)`);
               console.log(`   [Request] Is same location: ${cand.isSameLocation}`);
-              
+
               // Try to check profile, but don't block if it fails
               let isExplicitlyOffline = false;
               let profileStatus = 'unknown';
-              
+
               try {
                 const { data: profile, error: profileError } = await supabase
                   .from("profiles")
@@ -505,7 +505,7 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
                 console.log(`✅ [Request] Assuming mechanic ${cand.mechanic_id} is available (error checking profile, but has location)`);
                 profileStatus = 'error';
               }
-              
+
               // CRITICAL: Assign if not explicitly offline
               // Even if profile check fails, if they have a location, assign them
               if (!isExplicitlyOffline) {
@@ -525,7 +525,7 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
               console.log(`🎯 [Request] Attempting to assign job ${insertedData.id} to mechanic ${chosen}...`);
               const { error: assignError } = await supabase
                 .from("job_requests")
-                .update({ 
+                .update({
                   mechanic_id: chosen,
                   updated_at: new Date().toISOString()
                 })
@@ -542,10 +542,10 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
                 toast.error("Could not assign a mechanic automatically. An admin will assign one soon.");
               } else {
                 const assignedMechanic = candidates.find((c: any) => c.mechanic_id === chosen);
-                const distanceText = assignedMechanic 
-                  ? (assignedMechanic.dist < 1000 
-                      ? `${assignedMechanic.dist.toFixed(0)}m away` 
-                      : `${(assignedMechanic.dist / 1000).toFixed(2)}km away`)
+                const distanceText = assignedMechanic
+                  ? (assignedMechanic.dist < 1000
+                    ? `${assignedMechanic.dist.toFixed(0)}m away`
+                    : `${(assignedMechanic.dist / 1000).toFixed(2)}km away`)
                   : 'unknown distance';
                 const sameLocationText = assignedMechanic?.isSameLocation ? " (SAME LOCATION!)" : "";
                 toast.success(`✅ Mechanic assigned! (${distanceText}${sameLocationText}). They will need to accept the job.`);
@@ -572,7 +572,7 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
         console.error("❌ Error finding/assigning mechanic:", err);
         toast.error("Error finding nearby mechanics. An admin will assign one shortly.");
       }
-      
+
       // Reset form
       setVehicleType("");
       setIssueDescription("");
@@ -580,10 +580,10 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
       setMediaFiles([]);
     } catch (error: any) {
       console.error("Error submitting request:", error);
-      
+
       // Provide more specific error messages
       let errorMessage = "Failed to submit request. Please try again.";
-      
+
       if (error?.code === "PGRST116" || error?.message?.includes("permission denied")) {
         errorMessage = "Permission denied. Please make sure you're logged in and try again.";
       } else if (error?.message) {
@@ -591,9 +591,9 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
       } else if (error?.error_description) {
         errorMessage = `Error: ${error.error_description}`;
       }
-      
+
       toast.error(errorMessage);
-      
+
       // Log full error for debugging
       console.error("Full error details:", {
         error,
@@ -608,15 +608,15 @@ const RequestAssistanceForm = ({ initialLocation }: RequestAssistanceFormProps =
   };
 
   return (
-    <Card className="w-full">
+    <Card className="w-full h-full flex flex-col">
       <CardHeader className="p-4 sm:p-6">
         <CardTitle className="text-lg sm:text-xl lg:text-2xl">Request Roadside Assistance</CardTitle>
         <CardDescription className="text-xs sm:text-sm">
           Fill in the details below and we'll connect you with a nearby mechanic
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-4 sm:p-6">
-        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+      <CardContent className="p-4 sm:p-6 flex-1 flex flex-col">
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col justify-between gap-4">
           <div className="space-y-2">
             <Label htmlFor="vehicleType" className="text-sm sm:text-base">Vehicle Type *</Label>
             <Select value={vehicleType} onValueChange={setVehicleType}>

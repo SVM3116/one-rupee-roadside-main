@@ -16,10 +16,12 @@ interface ChatButtonProps {
   userId: string;
   unreadCount?: number;
   onOpen?: () => void;
+  onClose?: () => void;
   senderType?: 'user' | 'mechanic';
+  className?: string;
 }
 
-export default function ChatButton({ requestId, userId, unreadCount = 0, onOpen, senderType = 'user' }: ChatButtonProps) {
+export default function ChatButton({ requestId, userId, unreadCount = 0, onOpen, onClose, senderType = 'user', className }: ChatButtonProps) {
   const [open, setOpen] = useState(false);
 
   const handleOpenChange = (isOpen: boolean) => {
@@ -28,18 +30,20 @@ export default function ChatButton({ requestId, userId, unreadCount = 0, onOpen,
     if (isOpen && onOpen) {
       // Call immediately to update openChatRequestId ref in notifications
       onOpen();
+    } else if (!isOpen && onClose) {
+      onClose();
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2 relative">
+        <Button variant="outline" size="sm" className={`gap-2 relative ${className || ''}`}>
           <MessageCircle className="h-4 w-4" />
           Chat
           {unreadCount > 0 && (
-            <Badge 
-              variant="destructive" 
+            <Badge
+              variant="destructive"
               className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs"
             >
               {unreadCount > 9 ? '9+' : unreadCount}
@@ -53,8 +57,8 @@ export default function ChatButton({ requestId, userId, unreadCount = 0, onOpen,
         </DialogHeader>
         <div className="px-6 pb-6">
           {open && ( // Only render ChatWindow when dialog is open to prevent re-renders
-            <ChatWindow 
-              requestId={requestId} 
+            <ChatWindow
+              requestId={requestId}
               userId={userId}
               onMarkAsRead={onOpen}
               senderType={senderType}

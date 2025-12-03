@@ -30,14 +30,17 @@ interface MyRequestsProps {
   userId: string;
   getUnreadCount?: (requestId: string) => number;
   onChatOpen?: (requestId: string) => void;
+  onChatClose?: () => void;
   openChatRequestId?: string | null;
 }
 
-const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: MyRequestsProps) => {
+const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId, onChatClose }: MyRequestsProps) => {
   const [requests, setRequests] = useState<RequestWithRating[]>([]);
   const [loading, setLoading] = useState(true);
   const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<RequestWithRating | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 4;
 
   useEffect(() => {
     fetchRequests();
@@ -89,7 +92,7 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
                 .eq('id', req.id)
                 .single();
 
-              const userLoc = jobRow?.user_location;
+              const userLoc = jobRow?.user_location as any as { lat: number; lng: number };
               if (!userLoc) continue;
 
               const candidates = (locations || [])
@@ -137,7 +140,7 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
         .select("*, updated_at")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(20);
 
       if (jobError) throw jobError;
 
@@ -379,14 +382,14 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
   }
 
   return (
-    <Card className="w-full">
+    <Card className="w-full h-full flex flex-col">
       <CardHeader className="p-4 sm:p-6">
         <CardTitle className="text-lg sm:text-xl lg:text-2xl">My Requests</CardTitle>
         <CardDescription className="text-xs sm:text-sm">
           Track the status of your assistance requests
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-4 sm:p-6">
+      <CardContent className="p-4 sm:p-6 flex-1 flex flex-col justify-between">
         {requests.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <AlertCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -394,113 +397,139 @@ const MyRequests = ({ userId, getUnreadCount, onChatOpen, openChatRequestId }: M
             <p className="text-sm">Submit a request above to get started</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {requests.map((request) => (
-              <div
-                key={request.id}
-                className="p-3 sm:p-4 border rounded-lg space-y-2 sm:space-y-3 hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="outline" className="capitalize">
-                        {request.vehicle_type}
-                      </Badge>
-                      <div className={`flex items-center gap-1 px-2 py-1 rounded-full ${getStatusColor(request.status)} bg-opacity-20`}>
-                        {getStatusIcon(request.status)}
-                        <span className="text-xs font-medium">
-                          {getStatusLabel(request.status)}
-                        </span>
+          <>
+            <div className="space-y-4">
+              {requests.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((request) => (
+                <div
+                  key={request.id}
+                  className="p-3 sm:p-4 border rounded-lg space-y-2 sm:space-y-3 hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline" className="capitalize">
+                          {request.vehicle_type}
+                        </Badge>
+                        <div className={`flex items-center gap-1 px-2 py-1 rounded-full ${getStatusColor(request.status)} bg-opacity-20`}>
+                          {getStatusIcon(request.status)}
+                          <span className="text-xs font-medium">
+                            {getStatusLabel(request.status)}
+                          </span>
+                        </div>
+                        {request.mechanic_id && (
+                          <ChatButton
+                            requestId={request.id}
+                            userId={userId}
+                            unreadCount={getUnreadCount ? getUnreadCount(request.id) : 0}
+                            onOpen={onChatOpen ? () => onChatOpen(request.id) : undefined}
+                            onClose={onChatClose}
+                            senderType="user"
+                          />
+                        )}
                       </div>
-                      {request.mechanic_id && (
-                        <ChatButton
-                          requestId={request.id}
-                          userId={userId}
-                          unreadCount={getUnreadCount ? getUnreadCount(request.id) : 0}
-                          onOpen={onChatOpen ? () => onChatOpen(request.id) : undefined}
-                          senderType="user"
-                        />
-                      )}
-                    </div>
-                    <p className="text-sm">{request.issue_description}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Submitted: {new Date(request.created_at).toLocaleString()}
-                    </p>
+                      <p className="text-sm">{request.issue_description}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Submitted: {new Date(request.created_at).toLocaleString()}
+                      </p>
 
-                    {/* Mechanic Details - Show after accepting */}
-                    {request.mechanic_id && request.status !== 'pending' && (request.mechanic_name || request.mechanic_phone) && (
-                      <div className="mt-3 p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
-                        <p className="text-xs font-semibold text-green-900 dark:text-green-100 mb-2">Assigned Mechanic</p>
-                        <div className="flex items-center gap-3">
-                          {request.mechanic_photo ? (
-                            <img
-                              src={request.mechanic_photo}
-                              alt={request.mechanic_name || 'Mechanic'}
-                              className="h-10 w-10 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="h-10 w-10 rounded-full bg-green-200 dark:bg-green-800 flex items-center justify-center">
-                              <span className="text-sm font-semibold text-green-900 dark:text-green-100">
-                                {request.mechanic_name?.charAt(0).toUpperCase() || 'M'}
-                              </span>
-                            </div>
-                          )}
-                          <div className="flex-1">
-                            <p className="font-medium text-sm text-green-900 dark:text-green-100">
-                              {request.mechanic_name || 'Mechanic'}
-                            </p>
-                            {request.mechanic_phone && (
-                              <a
-                                href={`tel:${request.mechanic_phone}`}
-                                className="text-xs text-green-600 dark:text-green-400 hover:underline flex items-center gap-1"
-                              >
-                                <Phone className="h-3 w-3" />
-                                {request.mechanic_phone}
-                              </a>
+                      {/* Mechanic Details - Show after accepting */}
+                      {request.mechanic_id && request.status !== 'pending' && (request.mechanic_name || request.mechanic_phone) && (
+                        <div className="mt-3 p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                          <p className="text-xs font-semibold text-green-900 dark:text-green-100 mb-2">Assigned Mechanic</p>
+                          <div className="flex items-center gap-3">
+                            {request.mechanic_photo ? (
+                              <img
+                                src={request.mechanic_photo}
+                                alt={request.mechanic_name || 'Mechanic'}
+                                className="h-10 w-10 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="h-10 w-10 rounded-full bg-green-200 dark:bg-green-800 flex items-center justify-center">
+                                <span className="text-sm font-semibold text-green-900 dark:text-green-100">
+                                  {request.mechanic_name?.charAt(0).toUpperCase() || 'M'}
+                                </span>
+                              </div>
                             )}
+                            <div className="flex-1">
+                              <p className="font-medium text-sm text-green-900 dark:text-green-100">
+                                {request.mechanic_name || 'Mechanic'}
+                              </p>
+                              {request.mechanic_phone && (
+                                <a
+                                  href={`tel:${request.mechanic_phone}`}
+                                  className="text-xs text-green-600 dark:text-green-400 hover:underline flex items-center gap-1"
+                                >
+                                  <Phone className="h-3 w-3" />
+                                  {request.mechanic_phone}
+                                </a>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                    {request.status === 'pending' && request.mechanic_id && request.updated_at && (
-                      <div className="flex items-center gap-2 mt-2 text-sm">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-                        <span className="text-muted-foreground">Awaiting mechanic acceptance — ETA: {
-                          (() => {
-                            const ACCEPT_TIMEOUT_MS = 3 * 60 * 1000;
-                            const elapsed = Date.now() - new Date(request.updated_at!).getTime();
-                            const remaining = Math.max(0, ACCEPT_TIMEOUT_MS - elapsed);
-                            const mins = Math.floor(remaining / 60000);
-                            const secs = Math.floor((remaining % 60000) / 1000);
-                            return `${mins}:${secs.toString().padStart(2, '0')}`;
-                          })()
-                        }</span>
-                      </div>
-                    )}
-                    {request.status === 'completed' && request.mechanic_id && !request.hasRating && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="mt-2"
-                        onClick={() => {
-                          setSelectedRequest(request);
-                          setRatingDialogOpen(true);
-                        }}
-                      >
-                        <Star className="h-4 w-4 mr-1" />
-                        Rate Mechanic
-                      </Button>
-                    )}
-                    {request.status === 'completed' && request.hasRating && (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        ✓ Review submitted
-                      </p>
-                    )}
+                      )}
+                      {request.status === 'pending' && request.mechanic_id && request.updated_at && (
+                        <div className="flex items-center gap-2 mt-2 text-sm">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
+                          <span className="text-muted-foreground">Awaiting mechanic acceptance — ETA: {
+                            (() => {
+                              const ACCEPT_TIMEOUT_MS = 3 * 60 * 1000;
+                              const elapsed = Date.now() - new Date(request.updated_at!).getTime();
+                              const remaining = Math.max(0, ACCEPT_TIMEOUT_MS - elapsed);
+                              const mins = Math.floor(remaining / 60000);
+                              const secs = Math.floor((remaining % 60000) / 1000);
+                              return `${mins}:${secs.toString().padStart(2, '0')}`;
+                            })()
+                          }</span>
+                        </div>
+                      )}
+                      {request.status === 'completed' && request.mechanic_id && !request.hasRating && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-2"
+                          onClick={() => {
+                            setSelectedRequest(request);
+                            setRatingDialogOpen(true);
+                          }}
+                        >
+                          <Star className="h-4 w-4 mr-1" />
+                          Rate Mechanic
+                        </Button>
+                      )}
+                      {request.status === 'completed' && request.hasRating && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          ✓ Review submitted
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
+              ))}
+            </div>
+            {requests.length > ITEMS_PER_PAGE && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {Math.ceil(requests.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(requests.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={currentPage === Math.ceil(requests.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
         {selectedRequest && (
           <RatingDialog

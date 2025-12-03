@@ -34,14 +34,14 @@ const Dashboard = () => {
   const [onboardingCompleted, setOnboardingCompleted] = useState(true);
 
   // Chat notifications
-  const { 
-    getUnreadCount, 
-    markAsRead, 
-    setOpenChatRequestId, 
+  const {
+    getUnreadCount,
+    markAsRead,
+    setOpenChatRequestId,
     openChatRequestId,
     latestNotification,
     clearLatestNotification,
-    totalUnreadCount 
+    totalUnreadCount
   } = useChatNotifications(user?.id || null, userRole);
 
   // Stable callback for marking chat as read
@@ -50,6 +50,10 @@ const Dashboard = () => {
     setOpenChatRequestId(requestId);
     clearLatestNotification();
   }, [markAsRead, setOpenChatRequestId, clearLatestNotification]);
+
+  const handleChatClose = useCallback(() => {
+    setOpenChatRequestId(null);
+  }, [setOpenChatRequestId]);
 
   useEffect(() => {
     checkUser();
@@ -61,13 +65,13 @@ const Dashboard = () => {
   useEffect(() => {
     if (!user || !userRole) return;
     if (userRole === "mechanic" || userRole === "admin") return;
-    
+
     // Don't start if already watching
     if (locationWatchId !== null) return;
 
     const startLocationSharing = async () => {
       const { getLocation, watchPosition, isSecureContext } = await import("@/utils/geolocation");
-      
+
       // Check if we're on HTTP (non-HTTPS) - show info but still try
       if (!isSecureContext()) {
         toast.info("Requesting location access. Please allow when prompted.", {
@@ -86,7 +90,7 @@ const Dashboard = () => {
 
         setUserLocation({ lat: location.lat, lng: location.lng });
         setLocationRequired(false); // Location granted
-        
+
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
 
@@ -123,7 +127,7 @@ const Dashboard = () => {
       const id = watchPosition(
         async (location) => {
           setUserLocation({ lat: location.lat, lng: location.lng });
-          
+
           try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
@@ -164,7 +168,7 @@ const Dashboard = () => {
     };
 
     startLocationSharing();
-    
+
     return () => {
       if (locationWatchId !== null) {
         navigator.geolocation.clearWatch(locationWatchId);
@@ -176,7 +180,7 @@ const Dashboard = () => {
   const checkUser = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session) {
         setLoading(false);
         navigate("/auth");
@@ -191,9 +195,9 @@ const Dashboard = () => {
         .select("role")
         .eq("user_id", session.user.id)
         .maybeSingle();
-        
+
       let resolvedRole = "traveler";
-      
+
       if (roleError || !roleData) {
         // Fallback to auth user metadata when DB lookup fails or is blocked by RLS
         const metaRole = (session.user as any)?.user_metadata?.role ?? (session.user as any)?.role ?? null;
@@ -205,7 +209,7 @@ const Dashboard = () => {
       } else {
         resolvedRole = roleData?.role || ((session.user as any)?.user_metadata?.role ?? null) || "traveler";
       }
-      
+
       setUserRole(resolvedRole);
 
       // Fetch user profile to get photo and name (use maybeSingle to handle missing profiles)
@@ -225,7 +229,7 @@ const Dashboard = () => {
             .select("full_name, profile_photo")
             .eq("id", session.user.id)
             .maybeSingle();
-          
+
           if (!simpleError && simpleProfile) {
             // Profile exists but onboarding column doesn't - this is an EXISTING user
             // Mark onboarding as completed (true) for existing users
@@ -238,9 +242,9 @@ const Dashboard = () => {
           // Profile exists - this is an existing user
           setProfilePhoto(profileData.profile_photo || null);
           setProfileName(profileData.full_name || session.user.user_metadata?.full_name || session.user.email || "User");
-          
+
           const onboardingStatus = (profileData as any).onboarding_completed;
-          
+
           // If onboarding_completed is NULL (existing user before column was added), mark as completed
           if (onboardingStatus === null || onboardingStatus === undefined) {
             // This is an existing user - update their profile to mark onboarding as completed
@@ -256,7 +260,7 @@ const Dashboard = () => {
                   console.log("✅ Marked existing user onboarding as completed");
                 }
               });
-            
+
             setOnboardingCompleted(true);
           } else if (onboardingStatus === false) {
             // Explicitly marked as incomplete - new user, show onboarding
@@ -298,7 +302,7 @@ const Dashboard = () => {
         navigate("/admin");
         return;
       }
-      
+
       // If we get here, user is a traveler/user - show dashboard
       setLoading(false);
     } catch (error) {
@@ -316,14 +320,14 @@ const Dashboard = () => {
         setLocationWatchId(null);
         setLocationSharing(false);
       }
-      
+
       // Sign out from Supabase
       await supabase.auth.signOut();
-      
+
       // Clear storage
       localStorage.clear();
       sessionStorage.clear();
-      
+
       toast.success("Signed out successfully");
       navigate("/");
     } catch (error) {
@@ -385,7 +389,7 @@ const Dashboard = () => {
         }}
       />
       <Navbar />
-      
+
       <div className="container mx-auto px-4 py-4 sm:py-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
           <div>
@@ -448,7 +452,7 @@ const Dashboard = () => {
           <div className="space-y-6">
             {/* Location Status */}
             {userLocation && (
-              <Card 
+              <Card
                 className="p-4 bg-green-50 dark:bg-green-950 border-green-200"
                 data-tour="location-permission"
               >
@@ -461,58 +465,68 @@ const Dashboard = () => {
               </Card>
             )}
 
-            {trackingMechanicId ? (
-              <div data-tour="live-tracking">
-                <LiveLocationTracker
-                  apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || undefined}
-                  userLocation={userLocation || undefined}
-                  mechanicId={trackingMechanicId}
-                  showRoute={true}
-                  mode="user"
-                />
-              </div>
-            ) : (
-              <Card className="p-6" data-tour="live-tracking">
-                <h2 className="text-2xl font-bold mb-4">Find Nearby Mechanics</h2>
-                {import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? (
-                  <Map 
-                    apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
-                    userLocation={userLocation || undefined}
-                    showNearbyMechanics={true}
-                  />
-                ) : (
-                  <div className="p-6 text-center">
-                    <MapPin className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                    <p className="text-muted-foreground mb-2">Google Maps API key not configured</p>
-                    <p className="text-sm text-muted-foreground">
-                      Location tracking works without it! Add API key for interactive map.
-                    </p>
-                  </div>
-                )}
-              </Card>
-            )}
-
             {user?.id && (
               <>
-                <TrackingPanel
-                  userId={user.id}
-                  onTrackingStart={(mechanicId, jobId) => {
-                    setTrackingMechanicId(mechanicId);
-                    setActiveJobId(jobId);
-                  }}
-                  getUnreadCount={getUnreadCount}
-                  onChatOpen={handleChatOpen}
-                />
-                
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div data-tour="request-assistance">
+                  <div className="h-full">
+                    <TrackingPanel
+                      userId={user.id}
+                      onTrackingStart={(mechanicId, jobId) => {
+                        setTrackingMechanicId(mechanicId);
+                        setActiveJobId(jobId);
+                      }}
+                      getUnreadCount={getUnreadCount}
+                      onChatOpen={handleChatOpen}
+                      onChatClose={handleChatClose}
+                    />
+                  </div>
+
+                  <div className="h-full min-h-[400px] lg:min-h-0">
+                    {trackingMechanicId ? (
+                      <div data-tour="live-tracking" className="h-full">
+                        <LiveLocationTracker
+                          apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || undefined}
+                          userLocation={userLocation || undefined}
+                          mechanicId={trackingMechanicId}
+                          showRoute={true}
+                          mode="user"
+                        />
+                      </div>
+                    ) : (
+                      <Card className="p-6 h-full flex flex-col" data-tour="live-tracking">
+                        <h2 className="text-2xl font-bold mb-4">Find Nearby Mechanics</h2>
+                        <div className="flex-1 min-h-[300px]">
+                          {import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? (
+                            <Map
+                              apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
+                              userLocation={userLocation || undefined}
+                              showNearbyMechanics={true}
+                            />
+                          ) : (
+                            <div className="h-full flex flex-col items-center justify-center text-center p-6">
+                              <MapPin className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                              <p className="text-muted-foreground mb-2">Google Maps API key not configured</p>
+                              <p className="text-sm text-muted-foreground">
+                                Location tracking works without it! Add API key for interactive map.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div data-tour="request-assistance" className="h-full">
                     <RequestAssistanceForm initialLocation={userLocation} />
                   </div>
-                  <div data-tour="my-requests">
-                    <MyRequests 
+                  <div data-tour="my-requests" className="h-full">
+                    <MyRequests
                       userId={user.id}
                       getUnreadCount={getUnreadCount}
                       onChatOpen={handleChatOpen}
+                      onChatClose={handleChatClose}
                       openChatRequestId={openChatRequestId}
                     />
                   </div>

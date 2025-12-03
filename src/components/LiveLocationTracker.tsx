@@ -188,7 +188,7 @@ const LiveLocationTracker = ({
         try {
           const origin = mode === 'user' ? mechanicLocation : userLocation;
           const destination = mode === 'user' ? userLocation : mechanicLocation;
-          
+
           const result = await calculateETA(origin, destination, apiKey);
           if (result) {
             setEta(formatDuration(result.duration.value));
@@ -279,7 +279,7 @@ const LiveLocationTracker = ({
     : [];
 
   return (
-    <Card className="p-4">
+    <Card className="p-4 h-full">
       {/* Status Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">

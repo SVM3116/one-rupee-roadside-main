@@ -48,6 +48,8 @@ const MechanicDashboard = () => {
   const [profileName, setProfileName] = useState<string>("");
   const lastJobCountRef = useRef<number>(0);
   const [userRole, setUserRole] = useState<'mechanic' | 'user' | null>('mechanic');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 4;
 
   // Chat notifications
   const {
@@ -931,144 +933,239 @@ const MechanicDashboard = () => {
             ['accepted', 'on_the_way', 'reached_destination', 'repair_started', 'repair_completed'].includes(j.status)
           );
 
-          if (!activeJob) return null;
+
 
           const getStatusBadge = (status: string) => {
             const statusConfig = {
-              accepted: { label: 'Accepted', className: 'bg-blue-600' },
-              on_the_way: { label: 'On The Way', className: 'bg-orange-600' },
-              reached_destination: { label: 'Reached', className: 'bg-blue-600' },
-              repair_started: { label: 'Repair Started', className: 'bg-yellow-600' },
-              repair_completed: { label: 'Repair Completed', className: 'bg-green-600' },
+              accepted: { label: 'Accepted', className: 'bg-blue-600 animate-pulse shadow-lg shadow-blue-500/50' },
+              on_the_way: { label: 'On The Way', className: 'bg-orange-600 animate-pulse shadow-lg shadow-orange-500/50' },
+              reached_destination: { label: 'Reached', className: 'bg-purple-600 animate-pulse shadow-lg shadow-purple-500/50' },
+              repair_started: { label: 'Repair Started', className: 'bg-yellow-600 animate-pulse shadow-lg shadow-yellow-500/50' },
+              repair_completed: { label: 'Repair Completed', className: 'bg-green-600 animate-pulse shadow-lg shadow-green-500/50' },
             };
             const config = statusConfig[status as keyof typeof statusConfig] || { label: status, className: 'bg-gray-600' };
-            return <Badge className={config.className}>{config.label}</Badge>;
+            return (
+              <Badge className={`${config.className} px-3 py-1 text-sm font-bold tracking-wide transition-all duration-300 hover:scale-105`}>
+                {config.label}
+              </Badge>
+            );
           };
 
           const getStatusMessage = (status: string) => {
             switch (status) {
               case 'accepted':
-                return 'Job Accepted - Ready to Start!';
+                return 'Job Accepted - Ready to Start! 🚀';
               case 'on_the_way':
-                return 'On The Way to Customer';
+                return 'Driving to Customer 🚗💨';
               case 'reached_destination':
-                return 'Reached Customer Location';
+                return 'Arrived at Location 📍';
               case 'repair_started':
-                return 'Repair in Progress';
+                return 'Fixing the Vehicle 🔧';
               case 'repair_completed':
-                return 'Repair Completed!';
+                return 'Job Done! Great Work 🎉';
               default:
                 return `Status: ${status.replace('_', ' ')}`;
             }
           };
 
-          // Get card background tint based on status
-          const getCardTint = (status: string) => {
-            const tints = {
-              accepted: 'rgba(59, 130, 246, 0.03)', // Blue tint
-              on_the_way: 'rgba(251, 146, 60, 0.03)', // Orange tint
-              reached_destination: 'rgba(59, 130, 246, 0.03)', // Blue tint
-              repair_started: 'rgba(250, 204, 21, 0.03)', // Yellow tint
-              repair_completed: 'rgba(34, 197, 94, 0.03)', // Green tint
+          // Get card background gradient based on status
+          const getCardStyle = (status: string) => {
+            const styles = {
+              accepted: 'from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800',
+              on_the_way: 'from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900 border-orange-200 dark:border-orange-800',
+              reached_destination: 'from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800',
+              repair_started: 'from-yellow-50 to-yellow-100 dark:from-yellow-950 dark:to-yellow-900 border-yellow-200 dark:border-yellow-800',
+              repair_completed: 'from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800',
             };
-            return tints[status as keyof typeof tints] || 'transparent';
+            return styles[status as keyof typeof styles] || 'from-gray-50 to-gray-100 border-gray-200';
           };
 
+          const getAnimatedIcon = (status: string) => {
+            switch (status) {
+              case 'accepted':
+                return <CheckCircle className="h-10 w-10 sm:h-12 sm:w-12 text-blue-600 animate-bounce drop-shadow-xl" />;
+              case 'on_the_way':
+                return <Navigation className="h-10 w-10 sm:h-12 sm:w-12 text-orange-600 animate-pulse drop-shadow-xl" />;
+              case 'reached_destination':
+                return <MapPin className="h-10 w-10 sm:h-12 sm:w-12 text-purple-600 animate-bounce drop-shadow-xl" />;
+              case 'repair_started':
+                return <Settings className="h-10 w-10 sm:h-12 sm:w-12 text-yellow-600 animate-spin-slow drop-shadow-xl" />; // Using Settings as Wrench alternative
+              case 'repair_completed':
+                return <CheckCircle className="h-10 w-10 sm:h-12 sm:w-12 text-green-600 animate-bounce drop-shadow-xl" />;
+              default:
+                return <Clock className="h-10 w-10 sm:h-12 sm:w-12 text-gray-600" />;
+            }
+          };
+
+          const jobForMap = activeJob || (jobs.length > 0 ? jobs[0] : null);
+
           return (
-            <Card className="mb-6" style={{ background: getCardTint(activeJob.status) }}>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Current Job Status</span>
-                  {getStatusBadge(activeJob.status)}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col items-center text-center space-y-4">
-                  {getStatusIcon(activeJob.status)}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              <div className="w-full">
+                {activeJob ? (
+                  <div className="relative group h-full">
+                    {/* Animated Glow Effect */}
+                    <div className={`absolute -inset-1 bg-gradient-to-r ${getCardStyle(activeJob.status).split(' ')[0].replace('50', '400').replace('100', '600')} rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200 animate-tilt`}></div>
 
-                  <div>
-                    <h3 className="font-semibold text-lg">
-                      {getStatusMessage(activeJob.status)}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      {activeJob.vehicle_type && `Vehicle: ${activeJob.vehicle_type}`}
-                    </p>
-                    {activeJob.issue_description && (
-                      <p className="text-sm text-muted-foreground">
-                        Issue: {activeJob.issue_description}
-                      </p>
-                    )}
+                    <Card className={`relative h-full bg-gradient-to-br ${getCardStyle(activeJob.status)} border-2 shadow-xl overflow-hidden flex flex-col`}>
+                      <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rotate-45 transform"></div>
+
+                      <CardHeader className="pb-2">
+                        <CardTitle className="flex items-center justify-between">
+                          <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300">
+                            Current Job Status
+                          </span>
+                          {getStatusBadge(activeJob.status)}
+                        </CardTitle>
+                      </CardHeader>
+
+                      <CardContent className="pt-2 pb-4 px-4">
+                        <div className="flex flex-col items-center text-center space-y-3">
+                          {/* Animated Icon Container */}
+                          <div className="relative p-2 rounded-full bg-white/50 dark:bg-black/20 backdrop-blur-sm shadow-inner">
+                            {getAnimatedIcon(activeJob.status)}
+                          </div>
+
+                          <div className="space-y-1">
+                            <h3 className="font-extrabold text-lg sm:text-xl bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-600 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                              {getStatusMessage(activeJob.status)}
+                            </h3>
+                            <p className="text-sm font-medium text-muted-foreground">
+                              {activeJob.vehicle_type && <span className="inline-flex items-center gap-1 bg-white/50 dark:bg-black/20 px-2 py-0.5 rounded-md text-xs">🚗 {activeJob.vehicle_type}</span>}
+                            </p>
+                            {activeJob.issue_description && (
+                              <p className="text-xs text-muted-foreground max-w-xs mx-auto bg-white/40 dark:bg-black/10 p-1.5 rounded-lg italic line-clamp-2">
+                                "{activeJob.issue_description}"
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Customer Details Card */}
+                          {activeJob.status !== 'pending' && (activeJob.user_name || activeJob.user_phone) && (
+                            <div className="w-full mt-2 p-2.5 bg-white/60 dark:bg-black/40 backdrop-blur-md rounded-lg border border-white/20 shadow-sm hover:shadow-md transition-all duration-300">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Customer Details</p>
+                              <div className="flex items-center justify-between">
+                                {activeJob.user_name && (
+                                  <div className="flex items-center gap-2">
+                                    <Avatar className="h-8 w-8 border-2 border-primary/20">
+                                      <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
+                                        {activeJob.user_name.charAt(0)}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <div className="text-left">
+                                      <p className="font-bold text-xs sm:text-sm text-foreground">{activeJob.user_name}</p>
+                                      <p className="text-[10px] text-muted-foreground">Valued Customer</p>
+                                    </div>
+                                  </div>
+                                )}
+                                {activeJob.user_phone && (
+                                  <a
+                                    href={`tel:${activeJob.user_phone}`}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-full font-semibold text-xs shadow-sm hover:shadow-md transition-all transform hover:scale-105 active:scale-95"
+                                  >
+                                    <Phone className="h-3 w-3 animate-pulse" />
+                                    <span>Call</span>
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Navigate to Customer Button */}
+                          {activeJob.user_location && (
+                            <div className="w-full mt-1">
+                              <Button
+                                type="button"
+                                variant="default"
+                                size="sm"
+                                onClick={() => {
+                                  const { lat, lng } = activeJob.user_location;
+                                  const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+                                  window.open(googleMapsUrl, '_blank');
+                                }}
+                                className="w-full h-14 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5"
+                              >
+                                <Navigation className="h-4 w-4 mr-1.5 animate-bounce" />
+                                <span className="font-bold text-sm">Navigate to Customer</span>
+                                <ExternalLink className="h-3 w-3 ml-1.5 opacity-70" />
+                              </Button>
+                            </div>
+                          )}
+
+                          {/* Swipe Button */}
+                          <div className="w-full transform transition-all duration-300 hover:scale-105">
+                            <SwipeButton
+                              currentStatus={activeJob.status}
+                              onStatusUpdate={(newStatus) => updateJobStatus(activeJob.id, newStatus)}
+                            />
+                          </div>
+
+                          {activeJob.user_id && user?.id && (
+                            <div className="w-full mt-2">
+                              <ChatButton
+                                requestId={activeJob.id}
+                                userId={user.id}
+                                unreadCount={getUnreadCount(activeJob.id)}
+                                onOpen={() => handleChatOpen(activeJob.id)}
+                                senderType="mechanic"
+                                className="w-full h-14"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
+                ) : (
+                  <Card className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4 border-dashed border-2">
+                    <div className="p-4 rounded-full bg-primary/10">
+                      <Settings className="h-12 w-12 text-primary animate-spin-slow" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold">Ready for Work</h3>
+                      <p className="text-muted-foreground">Waiting for new job assignments...</p>
+                    </div>
+                  </Card>
+                )}
+              </div>
 
-                  {/* Customer Details */}
-                  {activeJob.status !== 'pending' && (activeJob.user_name || activeJob.user_phone) && (
-                    <div className="w-full mt-4 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <p className="text-xs font-semibold text-blue-900 dark:text-blue-100 mb-2">Customer Details</p>
-                      <div className="space-y-1">
-                        {activeJob.user_name && (
-                          <p className="font-medium text-sm text-blue-900 dark:text-blue-100">
-                            {activeJob.user_name}
-                          </p>
-                        )}
-                        {activeJob.user_phone && (
-                          <a
-                            href={`tel:${activeJob.user_phone}`}
-                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center justify-center gap-1"
-                          >
-                            <Phone className="h-3 w-3" />
-                            {activeJob.user_phone}
-                          </a>
-                        )}
+              {/* Right Column: Live Tracking */}
+              <div className="w-full h-full min-h-[400px] lg:min-h-0">
+                {jobForMap && jobForMap.user_location ? (
+                  <div className="h-full rounded-xl overflow-hidden shadow-lg border-2 border-primary/10">
+                    <LiveLocationTracker
+                      apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || undefined}
+                      userLocation={jobForMap.user_location}
+                      userId={jobForMap.user_id}
+                      mechanicId={user?.id}
+                      showRoute={true}
+                      mode="mechanic"
+                    />
+                  </div>
+                ) : (
+                  <Card className="h-full">
+                    <CardHeader>
+                      <CardTitle>Job Locations & Live Tracking</CardTitle>
+                      <CardDescription>
+                        View customer locations when you have assigned jobs
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center justify-center h-full min-h-[200px] text-muted-foreground">
+                        <div className="text-center">
+                          <MapPin className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                          <p>No active jobs with location data</p>
+                        </div>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Navigate to Customer Button */}
-                  {activeJob.user_location && (
-                    <div className="w-full mt-4">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const { lat, lng } = activeJob.user_location;
-                          const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-                          window.open(googleMapsUrl, '_blank');
-                        }}
-                        className="w-full text-xs sm:text-sm"
-                      >
-                        <Navigation className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                        <span className="hidden sm:inline">Navigate to Customer</span>
-                        <span className="sm:hidden">Navigate</span>
-                        <ExternalLink className="h-3 w-3 ml-1 sm:ml-2" />
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* Swipe Button - ONLY THIS REPLACES THE OLD BUTTONS */}
-                  <SwipeButton
-                    currentStatus={activeJob.status}
-                    onStatusUpdate={(newStatus) => updateJobStatus(activeJob.id, newStatus)}
-                  />
-
-                  {activeJob.user_id && user?.id && (
-                    <div className="mt-4">
-                      <ChatButton
-                        requestId={activeJob.id}
-                        userId={user.id}
-                        unreadCount={getUnreadCount(activeJob.id)}
-                        onOpen={() => handleChatOpen(activeJob.id)}
-                        senderType="mechanic"
-                      />
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div >
           );
         })()}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="mb-8">
           <Card>
             <CardHeader>
               <CardTitle>Assigned Jobs</CardTitle>
@@ -1084,7 +1181,7 @@ const MechanicDashboard = () => {
                     <p>No jobs assigned yet</p>
                   </div>
                 ) : (
-                  jobs.map((job) => (
+                  jobs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((job) => (
                     <div
                       key={job.id}
                       className="p-3 sm:p-4 border rounded-lg space-y-2 sm:space-y-3"
@@ -1108,6 +1205,7 @@ const MechanicDashboard = () => {
                                 userId={user.id}
                                 unreadCount={getUnreadCount(job.id)}
                                 onOpen={() => handleChatOpen(job.id)}
+                                onClose={() => setOpenChatRequestId(null)}
                                 senderType="mechanic"
                               />
                             )}
@@ -1169,54 +1267,54 @@ const MechanicDashboard = () => {
                     </div>
                   ))
                 )}
+
+                {jobs.length > ITEMS_PER_PAGE && (
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {currentPage} of {Math.ceil(jobs.length / ITEMS_PER_PAGE)}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(Math.ceil(jobs.length / ITEMS_PER_PAGE), p + 1))}
+                      disabled={currentPage === Math.ceil(jobs.length / ITEMS_PER_PAGE)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
 
-          {jobs.length > 0 && jobs[0].user_location ? (
-            <LiveLocationTracker
-              apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || undefined}
-              userLocation={jobs[0].user_location}
-              userId={jobs[0].user_id}
-              mechanicId={user?.id}
-              showRoute={true}
-              mode="mechanic"
-            />
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>Job Locations & Live Tracking</CardTitle>
-                <CardDescription>
-                  View customer locations when you have assigned jobs
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-center h-64 text-muted-foreground">
-                  <div className="text-center">
-                    <MapPin className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>No active jobs with location data</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+
         </div>
-      </main>
+      </main >
 
       <Footer />
 
       {/* Chat Notification Badge - Shows when new messages arrive */}
-      {latestNotification && (
-        <ChatNotificationBadge
-          unreadCount={totalUnreadCount}
-          lastMessage={latestNotification.message}
-          onClick={() => {
-            handleChatOpen(latestNotification.requestId);
-            setOpenChatRequestId(latestNotification.requestId);
-          }}
-        />
-      )}
-    </div>
+      {
+        latestNotification && (
+          <ChatNotificationBadge
+            unreadCount={totalUnreadCount}
+            lastMessage={latestNotification.message}
+            onClick={() => {
+              handleChatOpen(latestNotification.requestId);
+              setOpenChatRequestId(latestNotification.requestId);
+            }}
+          />
+        )
+      }
+    </div >
   );
 };
 
